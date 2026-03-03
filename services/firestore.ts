@@ -346,19 +346,40 @@ export async function saveAddressToStoreOwner(
   }
 ): Promise<boolean> {
   try {
-    const userDoc = await getDoc(doc(db, "users", storeOwnerId));
-    if (!userDoc.exists()) {
-      console.log("Store owner not found:", storeOwnerId);
-      return false;
-    }
-    const userData = userDoc.data();
-    const existing = Array.isArray(userData.addressSubmissions) ? userData.addressSubmissions : [];
-    existing.unshift(address);
-    await updateDoc(doc(db, "users", storeOwnerId), { addressSubmissions: existing });
-    console.log("Address saved to store owner:", storeOwnerId, "address:", address.id);
+    const addressRef = doc(db, "stores", storeOwnerId, "addresses", address.id);
+    await setDoc(addressRef, { ...address, savedAt: serverTimestamp() });
+    console.log("Address saved to store subcollection:", storeOwnerId, "address:", address.id);
     return true;
   } catch (error) {
-    console.log("Error saving address to store owner:", error);
+    console.log("Error saving address to store:", error);
+    return false;
+  }
+}
+
+export async function getStoreAddresses(storeOwnerId: string): Promise<Record<string, any>[]> {
+  try {
+    const snapshot = await getDocs(collection(db, "stores", storeOwnerId, "addresses"));
+    const addresses = snapshot.docs.map((d) => ({ ...d.data() }));
+    addresses.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+    console.log("Loaded", addresses.length, "addresses for store:", storeOwnerId);
+    return addresses;
+  } catch (error) {
+    console.log("Error loading store addresses:", error);
+    return [];
+  }
+}
+
+export async function deleteStoreAddress(storeOwnerId: string, addressId: string): Promise<boolean> {
+  try {
+    await deleteDoc(doc(db, "stores", storeOwnerId, "addresses", addressId));
+    console.log("Address deleted from store:", storeOwnerId, "address:", addressId);
+    return true;
+  } catch (error) {
+    console.log("Error deleting store address:", error);
     return false;
   }
 }

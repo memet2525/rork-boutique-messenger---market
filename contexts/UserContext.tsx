@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import createContextHook from "@nkzw/create-context-hook";
 import {
@@ -15,6 +15,8 @@ import {
   saveStore,
   deleteStore,
   sendAdminChatMessage,
+  getStoreAddresses,
+  deleteStoreAddress,
 } from "@/services/firestore";
 import { slugify } from "@/utils/links";
 
@@ -176,6 +178,17 @@ export const [UserProvider, useUser] = createContextHook(() => {
     enabled: !!uid,
   });
 
+  const storeAddressesQuery = useQuery({
+    queryKey: ["storeAddresses", uid],
+    queryFn: async () => {
+      if (!uid) return [];
+      console.log("Loading store addresses from subcollection:", uid);
+      const addresses = await getStoreAddresses(uid);
+      return addresses as AddressSubmission[];
+    },
+    enabled: !!uid && profile.isStore,
+  });
+
   const saveMutation = useMutation({
     mutationFn: async (updated: UserProfile) => {
       if (!uid) return updated;
@@ -320,6 +333,10 @@ export const [UserProvider, useUser] = createContextHook(() => {
     [profile.storeProducts, updateProfile]
   );
 
+  const storeAddresses = useMemo(() => {
+    return storeAddressesQuery.data ?? profile.addressSubmissions ?? [];
+  }, [storeAddressesQuery.data, profile.addressSubmissions]);
+
   const addAddressSubmission = useCallback(
     (address: Omit<AddressSubmission, "id" | "createdAt">) => {
       const newAddress: AddressSubmission = {
@@ -335,12 +352,24 @@ export const [UserProvider, useUser] = createContextHook(() => {
   );
 
   const deleteAddressSubmission = useCallback(
-    (addressId: string) => {
+    async (addressId: string) => {
+      if (uid) {
+        const success = await deleteStoreAddress(uid, addressId);
+        if (success) {
+          queryClient.invalidateQueries({ queryKey: ["storeAddresses", uid] });
+        }
+      }
       const updated = profile.addressSubmissions.filter((a) => a.id !== addressId);
       updateProfile({ addressSubmissions: updated });
     },
-    [profile.addressSubmissions, updateProfile]
+    [profile.addressSubmissions, updateProfile, uid, queryClient]
   );
+
+  const refreshAddresses = useCallback(() => {
+    if (uid) {
+      queryClient.invalidateQueries({ queryKey: ["storeAddresses", uid] });
+    }
+  }, [uid, queryClient]);
 
   const register = useCallback(
     async (firstName: string, lastName: string, email: string, password: string) => {
@@ -452,6 +481,8 @@ export const [UserProvider, useUser] = createContextHook(() => {
     updateStoreProduct,
     addAddressSubmission,
     deleteAddressSubmission,
+    storeAddresses,
+    refreshAddresses,
     register,
     login,
     logout,

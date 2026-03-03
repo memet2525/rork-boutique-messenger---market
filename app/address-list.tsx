@@ -231,9 +231,12 @@ function ShippingLabel({ address, onPrint, onShare, onDelete }: {
 
 export default function AddressListScreen() {
   const router = useRouter();
-  const { profile, deleteAddressSubmission } = useUser();
+  const { profile, deleteAddressSubmission, storeAddresses } = useUser();
   const { showAlert } = useAlert();
-  const addresses = profile.addressSubmissions ?? [];
+  const addresses = useMemo(() => 
+    storeAddresses.length > 0 ? storeAddresses : (profile.addressSubmissions ?? []),
+    [storeAddresses, profile.addressSubmissions]
+  );
 
   const handlePrint = useCallback(async (address: AddressSubmission) => {
     if (Platform.OS !== "web") {
