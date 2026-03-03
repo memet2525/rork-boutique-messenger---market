@@ -28,6 +28,7 @@ export default function AddressFormScreen() {
   }>();
   const router = useRouter();
   const { showAlert } = useAlert();
+  const [submitted, setSubmitted] = useState<boolean>(false);
 
   const [customerName, setCustomerName] = useState<string>("");
   const [customerPhone, setCustomerPhone] = useState<string>("");
@@ -80,11 +81,7 @@ export default function AddressFormScreen() {
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-      showAlert(
-        "Adres Gönderildi",
-        `Adresiniz ${storeName ?? "mağazaya"} başarıyla iletildi.`,
-        [{ text: "Tamam", onPress: () => router.back() }]
-      );
+      setSubmitted(true);
     },
     onError: (error: Error) => {
       console.log("Address submit error:", error);
@@ -98,6 +95,39 @@ export default function AddressFormScreen() {
     if (!canSubmit || isPending) return;
     mutate();
   }, [canSubmit, isPending, mutate]);
+
+  if (submitted) {
+    return (
+      <>
+        <Stack.Screen
+          options={{
+            title: "Teslimat Adresi",
+            headerStyle: { backgroundColor: Colors.primary },
+            headerTintColor: Colors.headerText,
+            headerTitleStyle: { fontWeight: "700" as const },
+          }}
+        />
+        <View style={styles.successContainer}>
+          <View style={styles.successIcon}>
+            <Send size={32} color={Colors.white} />
+          </View>
+          <Text style={styles.successTitle}>Adresiniz Gönderildi!</Text>
+          <Text style={styles.successMessage}>
+            Adresiniz {storeName ?? "mağazaya"} başarıyla iletildi. Mağaza en kısa sürede siparişinizi hazırlayacaktır.
+          </Text>
+          <TouchableOpacity
+            style={styles.successBtn}
+            onPress={() => {
+              try { router.back(); } catch { router.replace("/"); }
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.successBtnText}>Tamam</Text>
+          </TouchableOpacity>
+        </View>
+      </>
+    );
+  }
 
   return (
     <>
@@ -347,5 +377,46 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 14,
     lineHeight: 16,
+  },
+  successContainer: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  successIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: "700" as const,
+    color: Colors.text,
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  successMessage: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 28,
+  },
+  successBtn: {
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+  },
+  successBtnText: {
+    fontSize: 15,
+    fontWeight: "700" as const,
+    color: Colors.white,
   },
 });

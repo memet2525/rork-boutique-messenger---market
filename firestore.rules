@@ -14,10 +14,10 @@ service cloud.firestore {
       allow create: if request.auth != null;
       allow update, delete: if request.auth != null && request.auth.uid == storeId;
 
-      // Adres gönderimleri - herkes oluşturabilir, sadece mağaza sahibi okuyabilir/silebilir
+      // Adres gönderimleri - herkes oluşturabilir (üye olmayanlar dahil), sadece mağaza sahibi okuyabilir/silebilir
       match /addresses/{addressId} {
         allow read: if request.auth != null && request.auth.uid == storeId;
-        allow create: if request.auth != null;
+        allow create: if true;
         allow delete: if request.auth != null && request.auth.uid == storeId;
       }
     }
