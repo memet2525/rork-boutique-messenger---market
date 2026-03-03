@@ -11,15 +11,18 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Send, Package } from "lucide-react-native";
+import { Send, Package, MapPin } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
-import { useUser } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
 import { stores } from "@/mocks/stores";
-import { getFirestoreStore, getFirestoreStoreBySlug } from "@/services/firestore";
+import {
+  getFirestoreStore,
+  getFirestoreStoreBySlug,
+  saveAddressToStoreOwner,
+} from "@/services/firestore";
 
 export default function StoreAddressFormScreen() {
   const { id, productInfo: productInfoParam } = useLocalSearchParams<{
@@ -27,7 +30,6 @@ export default function StoreAddressFormScreen() {
     productInfo?: string;
   }>();
   const router = useRouter();
-  const { addAddressSubmission } = useUser();
   const { showAlert } = useAlert();
 
   const isMockOrOwn = id === "my-store" || !!stores.find((s) => s.id === id);
@@ -50,9 +52,15 @@ export default function StoreAddressFormScreen() {
 
   const resolvedStore = useMemo(() => {
     const mockStore = stores.find((s) => s.id === id);
-    if (mockStore) return { id: mockStore.id, name: mockStore.name };
-    if (firestoreData) return { id: (firestoreData.id as string) ?? id ?? "", name: (firestoreData.name as string) ?? "" };
-    return { id: id ?? "unknown", name: "" };
+    if (mockStore) return { id: mockStore.id, name: mockStore.name, ownerId: "" };
+    if (firestoreData) {
+      return {
+        id: (firestoreData.id as string) ?? id ?? "",
+        name: (firestoreData.name as string) ?? "",
+        ownerId: (firestoreData.ownerId as string) ?? (firestoreData.id as string) ?? id ?? "",
+      };
+    }
+    return { id: id ?? "unknown", name: "", ownerId: id ?? "" };
   }, [id, firestoreData]);
 
   const [customerName, setCustomerName] = useState<string>("");
@@ -71,53 +79,70 @@ export default function StoreAddressFormScreen() {
     district.trim().length >= 2 &&
     addressLine.trim().length >= 5;
 
+  const submitMutation = useMutation({
+    mutationFn: async () => {
+      const addressData = {
+        id: `addr_${Date.now()}`,
+        storeId: resolvedStore.id,
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        city: city.trim(),
+        district: district.trim(),
+        neighborhood: neighborhood.trim(),
+        addressLine: addressLine.trim(),
+        postalCode: postalCode.trim(),
+        note: note.trim(),
+        productInfo: productInfoParam ?? undefined,
+        createdAt: new Date().toISOString(),
+      };
+
+      const targetOwnerId = resolvedStore.ownerId || resolvedStore.id;
+      console.log("Saving address to store owner:", targetOwnerId);
+      const success = await saveAddressToStoreOwner(targetOwnerId, addressData);
+      if (!success) {
+        throw new Error("Adres kaydedilemedi");
+      }
+      return addressData;
+    },
+    onSuccess: () => {
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      showAlert(
+        "Adres Gönderildi",
+        `Adresiniz ${resolvedStore.name || "mağazaya"} başarıyla iletildi.`,
+        [{ text: "Tamam", onPress: () => router.back() }]
+      );
+    },
+    onError: (error: Error) => {
+      console.log("Address submit error:", error);
+      showAlert("Hata", error.message || "Adres gönderilemedi. Lütfen tekrar deneyin.");
+    },
+  });
+
+  const { mutate, isPending } = submitMutation;
+
   const handleSubmit = useCallback(() => {
-    if (!canSubmit) return;
-
-    if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-
-    addAddressSubmission({
-      storeId: resolvedStore.id,
-      customerName: customerName.trim(),
-      customerPhone: customerPhone.trim(),
-      city: city.trim(),
-      district: district.trim(),
-      neighborhood: neighborhood.trim(),
-      addressLine: addressLine.trim(),
-      postalCode: postalCode.trim(),
-      note: note.trim(),
-      productInfo: productInfoParam ?? undefined,
-    });
-
-    showAlert(
-      "Adres Gönderildi ✓",
-      `Adresiniz ${resolvedStore.name || "mağazaya"} başarıyla iletildi. Kargo bilgileriniz en kısa sürede paylaşılacaktır.`,
-      [{ text: "Tamam", onPress: () => router.back() }]
-    );
-  }, [
-    canSubmit,
-    customerName,
-    customerPhone,
-    city,
-    district,
-    neighborhood,
-    addressLine,
-    postalCode,
-    note,
-    resolvedStore,
-    productInfoParam,
-    addAddressSubmission,
-    router,
-    showAlert,
-  ]);
+    if (!canSubmit || isPending) return;
+    mutate();
+  }, [canSubmit, isPending, mutate]);
 
   if (isLoadingStore) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
+      <>
+        <Stack.Screen
+          options={{
+            headerShown: true,
+            title: "Teslimat Adresi",
+            headerStyle: { backgroundColor: Colors.primary },
+            headerTintColor: Colors.headerText,
+            headerTitleStyle: { fontWeight: "700" as const },
+          }}
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      </>
     );
   }
 
@@ -142,11 +167,14 @@ export default function StoreAddressFormScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {resolvedStore.name ? (
-            <Text style={styles.storeLabel}>
-              {resolvedStore.name}
+          <View style={styles.headerChip}>
+            <MapPin size={16} color={Colors.primary} />
+            <Text style={styles.headerChipText}>
+              {resolvedStore.name
+                ? `${resolvedStore.name} için teslimat bilgileri`
+                : "Teslimat Bilgileri"}
             </Text>
-          ) : null}
+          </View>
 
           {productInfoParam ? (
             <View style={styles.productChip}>
@@ -156,6 +184,8 @@ export default function StoreAddressFormScreen() {
               </Text>
             </View>
           ) : null}
+
+          <Text style={styles.sectionLabel}>Alıcı Bilgileri</Text>
 
           <TextInput
             style={styles.input}
@@ -177,6 +207,8 @@ export default function StoreAddressFormScreen() {
             maxLength={15}
             testID="address-phone"
           />
+
+          <Text style={styles.sectionLabel}>Adres Bilgileri</Text>
 
           <View style={styles.row}>
             <TextInput
@@ -246,14 +278,23 @@ export default function StoreAddressFormScreen() {
           />
 
           <TouchableOpacity
-            style={[styles.submitBtn, !canSubmit && styles.submitBtnDisabled]}
+            style={[
+              styles.submitBtn,
+              (!canSubmit || isPending) && styles.submitBtnDisabled,
+            ]}
             onPress={handleSubmit}
-            disabled={!canSubmit}
+            disabled={!canSubmit || isPending}
             activeOpacity={0.8}
             testID="submit-address"
           >
-            <Send size={18} color={Colors.white} />
-            <Text style={styles.submitBtnText}>Gönder</Text>
+            {isPending ? (
+              <ActivityIndicator size="small" color={Colors.white} />
+            ) : (
+              <Send size={18} color={Colors.white} />
+            )}
+            <Text style={styles.submitBtnText}>
+              {isPending ? "Gönderiliyor..." : "Adresi Gönder"}
+            </Text>
           </TouchableOpacity>
 
           <Text style={styles.disclaimer}>
@@ -283,36 +324,53 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: Colors.background,
   },
-  storeLabel: {
-    fontSize: 13,
+  headerChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.primary + "0D",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  headerChipText: {
+    fontSize: 14,
     fontWeight: "600" as const,
     color: Colors.primary,
-    marginBottom: 12,
-    textAlign: "center",
-    letterSpacing: 0.3,
+    flex: 1,
   },
   productChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: Colors.primary + "0D",
+    backgroundColor: Colors.white,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginBottom: 16,
-    alignSelf: "center",
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
   },
   productChipText: {
     fontSize: 12,
     color: Colors.primary,
     fontWeight: "500" as const,
-    maxWidth: 250,
+    flex: 1,
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: Colors.textSecondary,
+    marginBottom: 8,
+    marginTop: 4,
+    marginLeft: 2,
   },
   input: {
     backgroundColor: Colors.white,
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
     fontSize: 15,
     color: Colors.text,
     marginBottom: 10,
@@ -327,27 +385,34 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   textArea: {
-    minHeight: 80,
+    minHeight: 76,
     textAlignVertical: "top",
-    paddingTop: 14,
+    paddingTop: 13,
   },
   noteArea: {
     minHeight: 56,
     textAlignVertical: "top",
-    paddingTop: 14,
+    paddingTop: 13,
   },
   submitBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: Colors.primary,
-    marginTop: 8,
+    backgroundColor: Colors.accent,
+    marginTop: 12,
     borderRadius: 12,
     paddingVertical: 15,
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
   submitBtnDisabled: {
-    opacity: 0.4,
+    opacity: 0.5,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   submitBtnText: {
     fontSize: 15,
@@ -359,5 +424,6 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
     textAlign: "center",
     marginTop: 14,
+    lineHeight: 16,
   },
 });

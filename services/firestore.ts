@@ -328,6 +328,41 @@ export async function getUserChats(userId: string): Promise<FirestoreChat[]> {
   }
 }
 
+export async function saveAddressToStoreOwner(
+  storeOwnerId: string,
+  address: {
+    id: string;
+    storeId: string;
+    customerName: string;
+    customerPhone: string;
+    city: string;
+    district: string;
+    neighborhood: string;
+    addressLine: string;
+    postalCode: string;
+    note: string;
+    productInfo?: string;
+    createdAt: string;
+  }
+): Promise<boolean> {
+  try {
+    const userDoc = await getDoc(doc(db, "users", storeOwnerId));
+    if (!userDoc.exists()) {
+      console.log("Store owner not found:", storeOwnerId);
+      return false;
+    }
+    const userData = userDoc.data();
+    const existing = Array.isArray(userData.addressSubmissions) ? userData.addressSubmissions : [];
+    existing.unshift(address);
+    await updateDoc(doc(db, "users", storeOwnerId), { addressSubmissions: existing });
+    console.log("Address saved to store owner:", storeOwnerId, "address:", address.id);
+    return true;
+  } catch (error) {
+    console.log("Error saving address to store owner:", error);
+    return false;
+  }
+}
+
 export const BUTIKBIZ_ADMIN_ID = "butikbiz_admin";
 export const BUTIKBIZ_NAME = "ButikBiz";
 export const BUTIKBIZ_AVATAR = "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=200&h=200&fit=crop";
