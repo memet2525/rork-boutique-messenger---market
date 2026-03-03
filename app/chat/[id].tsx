@@ -128,6 +128,7 @@ export default function ChatDetailScreen() {
     storeId,
     storeName,
     storeAvatar,
+    storeOwnerId: storeOwnerIdParam,
     isOnline,
     productMessage,
     productImage,
@@ -138,6 +139,7 @@ export default function ChatDetailScreen() {
     storeId?: string;
     storeName?: string;
     storeAvatar?: string;
+    storeOwnerId?: string;
     isOnline?: string;
     productMessage?: string;
     productImage?: string;
@@ -205,7 +207,8 @@ export default function ChatDetailScreen() {
     ) {
       chatInitialized.current = true;
       const storeData = stores.find((s) => s.id === storeId);
-      const storeOwnerId = storeId ?? "unknown";
+      const resolvedOwnerId = storeOwnerIdParam || storeId || "unknown";
+      console.log("Chat init with storeOwnerId:", resolvedOwnerId, "storeId:", storeId);
 
       getOrCreateChat({
         chatId: id,
@@ -213,7 +216,7 @@ export default function ChatDetailScreen() {
         storeId: storeId,
         storeName: storeName ?? "Mağaza",
         storeAvatar: storeAvatar ?? storeData?.avatar ?? "",
-        storeOwnerId: storeOwnerId,
+        storeOwnerId: resolvedOwnerId,
         customerName: profile.name || profile.firstName || "Müşteri",
         customerAvatar: profile.avatar,
       }).then(() => {
@@ -222,7 +225,7 @@ export default function ChatDetailScreen() {
         console.log("Chat init error:", err);
       });
     }
-  }, [id, uid, storeId, storeName, storeAvatar, profile]);
+  }, [id, uid, storeId, storeName, storeAvatar, storeOwnerIdParam, profile]);
 
   const { mutate: sendMessageMutate } = useMutation({
     mutationFn: async (text: string) => {

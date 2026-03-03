@@ -34,7 +34,7 @@ import { getProductLink } from "@/utils/links";
 import { getChatId } from "@/services/firestore";
 
 export default function ProductDetailScreen() {
-  const { id, storeId } = useLocalSearchParams<{ id: string; storeId: string }>();
+  const { id, storeId, storeOwnerId: storeOwnerIdParam } = useLocalSearchParams<{ id: string; storeId: string; storeOwnerId?: string }>();
   const router = useRouter();
   const { profile, isLoggedIn, uid } = useUser();
   const { showAlert } = useAlert();
@@ -150,6 +150,12 @@ export default function ProductDetailScreen() {
     }
   }, [productData, storeData]);
 
+  const resolvedStoreOwnerId = useMemo(() => {
+    if (storeOwnerIdParam) return storeOwnerIdParam;
+    const targetStoreId = storeData?.id ?? storeId ?? "unknown";
+    return targetStoreId;
+  }, [storeOwnerIdParam, storeData, storeId]);
+
   const handleMessageStore = useCallback(() => {
     if (!isLoggedIn) {
       showAlert(
@@ -163,7 +169,7 @@ export default function ProductDetailScreen() {
       return;
     }
     const targetStoreId = storeData?.id ?? storeId ?? "unknown";
-    const chatId = getChatId(uid ?? "anon", targetStoreId);
+    const chatId = getChatId(uid ?? "anon", resolvedStoreOwnerId);
     const productInfo = `🛍️ ${productData?.name}\n💰 ${productData?.price}\n\nBu ürün hakkında bilgi almak istiyorum.`;
     router.push({
       pathname: "/chat/[id]" as RelativePathString,
@@ -172,6 +178,7 @@ export default function ProductDetailScreen() {
         storeId: targetStoreId,
         storeName: storeData?.name ?? "",
         storeAvatar: storeData?.avatar ?? "",
+        storeOwnerId: resolvedStoreOwnerId,
         isOnline: storeData?.isOnline ? "true" : "false",
         productMessage: productInfo,
         productImage: productData?.image ?? "",
@@ -179,7 +186,7 @@ export default function ProductDetailScreen() {
         productPrice: productData?.price ?? "",
       },
     });
-  }, [router, productData, storeData, storeId, uid, isLoggedIn, showAlert]);
+  }, [router, productData, storeData, storeId, uid, isLoggedIn, showAlert, resolvedStoreOwnerId]);
 
   if (!productData) {
     return (

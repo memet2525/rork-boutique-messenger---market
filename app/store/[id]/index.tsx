@@ -86,9 +86,15 @@ export default function StoreDetailScreen() {
     return id ?? "";
   }, [id, firestoreData]);
 
+  const storeOwnerId = useMemo(() => {
+    if (id === "my-store" && uid) return uid;
+    if (firestoreData && firestoreData.ownerId) return firestoreData.ownerId as string;
+    return resolvedStoreId;
+  }, [id, uid, firestoreData, resolvedStoreId]);
+
   const handleProductPress = React.useCallback((productId: string) => {
-    router.push({ pathname: "/product/[id]" as RelativePathString, params: { id: productId, storeId: resolvedStoreId ?? "" } });
-  }, [router, resolvedStoreId]);
+    router.push({ pathname: "/product/[id]" as RelativePathString, params: { id: productId, storeId: resolvedStoreId ?? "", storeOwnerId: storeOwnerId ?? "" } });
+  }, [router, resolvedStoreId, storeOwnerId]);
 
   const store = useMemo((): Store | undefined => {
     if (id === "my-store" && profile.isStore) {
@@ -205,7 +211,7 @@ export default function StoreDetailScreen() {
                   );
                   return;
                 }
-                const chatId = getChatId(uid ?? 'anon', resolvedStoreId ?? 'unknown');
+                const chatId = getChatId(uid ?? 'anon', storeOwnerId ?? 'unknown');
                 router.push({
                   pathname: "/chat/[id]" as RelativePathString,
                   params: {
@@ -213,6 +219,7 @@ export default function StoreDetailScreen() {
                     storeId: resolvedStoreId ?? "",
                     storeName: store.name,
                     storeAvatar: store.avatar,
+                    storeOwnerId: storeOwnerId ?? "",
                     isOnline: store.isOnline ? "true" : "false",
                   },
                 });
