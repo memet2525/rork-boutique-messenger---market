@@ -67,9 +67,7 @@ export default function StoreAddressFormScreen() {
   const [customerPhone, setCustomerPhone] = useState<string>("");
   const [city, setCity] = useState<string>("");
   const [district, setDistrict] = useState<string>("");
-  const [neighborhood, setNeighborhood] = useState<string>("");
   const [addressLine, setAddressLine] = useState<string>("");
-  const [postalCode, setPostalCode] = useState<string>("");
   const [note, setNote] = useState<string>("");
 
   const canSubmit =
@@ -88,9 +86,7 @@ export default function StoreAddressFormScreen() {
         customerPhone: customerPhone.trim(),
         city: city.trim(),
         district: district.trim(),
-        neighborhood: neighborhood.trim(),
         addressLine: addressLine.trim(),
-        postalCode: postalCode.trim(),
         note: note.trim(),
         productInfo: productInfoParam ?? undefined,
         createdAt: new Date().toISOString(),
@@ -228,28 +224,6 @@ export default function StoreAddressFormScreen() {
               onChangeText={setDistrict}
               maxLength={30}
               testID="address-district"
-            />
-          </View>
-
-          <View style={styles.row}>
-            <TextInput
-              style={[styles.input, styles.halfInput]}
-              placeholder="Mahalle"
-              placeholderTextColor={Colors.textLight}
-              value={neighborhood}
-              onChangeText={setNeighborhood}
-              maxLength={50}
-              testID="address-neighborhood"
-            />
-            <TextInput
-              style={[styles.input, styles.halfInput]}
-              placeholder="Posta Kodu"
-              placeholderTextColor={Colors.textLight}
-              value={postalCode}
-              onChangeText={setPostalCode}
-              keyboardType="numeric"
-              maxLength={5}
-              testID="address-postal"
             />
           </View>
 
