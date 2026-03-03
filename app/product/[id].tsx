@@ -25,13 +25,14 @@ import {
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useQuery } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { stores } from "@/mocks/stores";
 import { useUser } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
 import { getProductLink } from "@/utils/links";
-import { getChatId } from "@/services/firestore";
+import { getChatId, getFirestoreStore } from "@/services/firestore";
 
 export default function ProductDetailScreen() {
   const { id, storeId, storeOwnerId: storeOwnerIdParam } = useLocalSearchParams<{ id: string; storeId: string; storeOwnerId?: string }>();
@@ -66,6 +67,14 @@ export default function ProductDetailScreen() {
     };
   }, [profile]);
 
+  const isMockStore = !!storeId && (storeId === "my-store" || !!stores.find((s) => s.id === storeId));
+
+  const firestoreStoreQuery = useQuery({
+    queryKey: ["firestoreStore", storeId],
+    queryFn: () => getFirestoreStore(storeId!),
+    enabled: !!storeId && !isMockStore,
+  });
+
   const result = useMemo(() => {
     for (const sp of (profile.storeProducts ?? [])) {
       if (sp.id === id) {
@@ -94,8 +103,34 @@ export default function ProductDetailScreen() {
       const p = s.products.find((pr) => pr.id === id);
       if (p) return { product: p, store: s };
     }
+    if (firestoreStoreQuery.data) {
+      const fs = firestoreStoreQuery.data;
+      const products = (fs.products as any[]) ?? [];
+      const fp = products.find((p: any) => p.id === id);
+      if (fp) {
+        return {
+          product: {
+            id: fp.id as string,
+            name: (fp.name as string) ?? "",
+            price: (fp.price as string) ?? "",
+            image: (fp.image as string) ?? "",
+            images: (fp.images as string[]) ?? [],
+            description: (fp.description as string) ?? "",
+            features: (fp.features as string[]) ?? [],
+          },
+          store: {
+            id: (fs.id as string) ?? storeId ?? "",
+            name: (fs.name as string) ?? "",
+            avatar: (fs.avatar as string) ?? "",
+            category: (fs.category as string) ?? "Diğer",
+            rating: (fs.rating as number) ?? 5.0,
+            isOnline: (fs.isOnline as boolean) ?? true,
+          },
+        };
+      }
+    }
     return null;
-  }, [id, storeId, profile.storeProducts, userStore]);
+  }, [id, storeId, profile.storeProducts, userStore, firestoreStoreQuery.data]);
 
   const productData = result?.product;
   const storeData = result?.store;

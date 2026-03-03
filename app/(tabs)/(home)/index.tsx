@@ -181,6 +181,7 @@ export default function MarketplaceScreen() {
           name: sp.name,
           price: sp.price,
           image: sp.image,
+          images: sp.images,
           description: sp.description,
           features: sp.features,
         })),
