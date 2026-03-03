@@ -337,10 +337,10 @@ export async function saveAddressToStoreOwner(
     customerPhone: string;
     city: string;
     district: string;
-    neighborhood: string;
     addressLine: string;
-    postalCode: string;
     note: string;
+    neighborhood?: string;
+    postalCode?: string;
     productInfo?: string;
     createdAt: string;
   }
