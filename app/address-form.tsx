@@ -160,26 +160,25 @@ export default function AddressFormScreen() {
 
           <Text style={styles.sectionLabel}>Adres Bilgileri</Text>
 
-          <View style={styles.row}>
-            <TextInput
-              style={[styles.input, styles.halfInput]}
-              placeholder="İl *"
-              placeholderTextColor={Colors.textLight}
-              value={city}
-              onChangeText={setCity}
-              maxLength={30}
-              testID="address-city"
-            />
-            <TextInput
-              style={[styles.input, styles.halfInput]}
-              placeholder="İlçe *"
-              placeholderTextColor={Colors.textLight}
-              value={district}
-              onChangeText={setDistrict}
-              maxLength={30}
-              testID="address-district"
-            />
-          </View>
+          <TextInput
+            style={styles.input}
+            placeholder="İl *"
+            placeholderTextColor={Colors.textLight}
+            value={city}
+            onChangeText={setCity}
+            maxLength={30}
+            testID="address-city"
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="İlçe *"
+            placeholderTextColor={Colors.textLight}
+            value={district}
+            onChangeText={setDistrict}
+            maxLength={30}
+            testID="address-district"
+          />
 
 
           <TextInput
