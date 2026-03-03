@@ -92,9 +92,9 @@ export default function StoreAddressFormScreen() {
         createdAt: new Date().toISOString(),
       };
 
-      const targetOwnerId = resolvedStore.ownerId || resolvedStore.id;
-      console.log("Saving address to store owner:", targetOwnerId);
-      const success = await saveAddressToStoreOwner(targetOwnerId, addressData);
+      const storeDocId = resolvedStore.id;
+      console.log("Saving address to store doc:", storeDocId, "ownerId:", resolvedStore.ownerId);
+      const success = await saveAddressToStoreOwner(storeDocId, addressData);
       if (!success) {
         throw new Error("Adres kaydedilemedi");
       }
@@ -111,7 +111,7 @@ export default function StoreAddressFormScreen() {
       );
     },
     onError: (error: Error) => {
-      console.log("Address submit error:", error);
+      console.log("Address submit error:", error?.message, error);
       showAlert("Hata", error.message || "Adres gönderilemedi. Lütfen tekrar deneyin.");
     },
   });

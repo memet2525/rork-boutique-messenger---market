@@ -346,13 +346,15 @@ export async function saveAddressToStoreOwner(
   }
 ): Promise<boolean> {
   try {
+    console.log("saveAddressToStoreOwner called with storeOwnerId:", storeOwnerId, "addressId:", address.id);
     const addressRef = doc(db, "stores", storeOwnerId, "addresses", address.id);
-    await setDoc(addressRef, { ...address, savedAt: serverTimestamp() });
+    const savedAt = new Date().toISOString();
+    await setDoc(addressRef, { ...address, savedAt });
     console.log("Address saved to store subcollection:", storeOwnerId, "address:", address.id);
     return true;
-  } catch (error) {
-    console.log("Error saving address to store:", error);
-    return false;
+  } catch (error: any) {
+    console.log("Error saving address to store:", error?.code, error?.message, error);
+    throw new Error(error?.message || "Adres kaydedilemedi");
   }
 }
 
