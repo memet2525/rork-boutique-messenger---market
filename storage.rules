@@ -2,7 +2,9 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Avatar görselleri - giriş yapan herkes yükleyebilir, herkes okuyabilir
+    // Avatar görselleri
+    // - Herkes okuyabilir
+    // - Sadece giriş yapan kullanıcı kendi avatarını yükleyebilir
     match /avatars/{fileName} {
       allow read: if true;
       allow write: if request.auth != null
@@ -10,12 +12,37 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
     }
 
-    // Ürün görselleri - giriş yapan herkes yükleyebilir, herkes okuyabilir
+    // Ürün görselleri
+    // - Herkes okuyabilir
+    // - Sadece mağaza sahibi kendi ürün görsellerini yükleyebilir
     match /products/{storeId}/{fileName} {
       allow read: if true;
       allow write: if request.auth != null
+        && request.auth.uid == storeId
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
+    }
+
+    // Mağaza görselleri (kapak, logo vb.)
+    match /stores/{storeId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.auth.uid == storeId
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Sohbet görselleri
+    match /chats/{chatId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Diğer tüm dosyalar reddedilir
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }
