@@ -414,6 +414,8 @@ export default function AddressListScreen() {
               testID="address-search"
               autoCorrect={false}
               autoCapitalize="none"
+              selectionColor="transparent"
+              cursorColor="transparent"
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery("")} hitSlop={8}>
