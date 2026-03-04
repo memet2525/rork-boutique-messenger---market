@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useEffect } from "react";
+import React, { useCallback, useRef, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
+  Modal,
+  TextInput,
 } from "react-native";
 import { Image } from "expo-image";
 import { useRouter, RelativePathString } from "expo-router";
@@ -18,6 +20,9 @@ import {
   AlertCircle,
   Crown,
   FlaskConical,
+  X,
+  Search,
+  Store,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -25,7 +30,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
 import { useUser } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
-import { getUserChats, FirestoreChat, BUTIKBIZ_ADMIN_ID, BUTIKBIZ_NAME, BUTIKBIZ_AVATAR, sendAdminChatMessage, createTestChatBetweenStores } from "@/services/firestore";
+import { getUserChats, FirestoreChat, BUTIKBIZ_ADMIN_ID, BUTIKBIZ_NAME, BUTIKBIZ_AVATAR, sendAdminChatMessage, createTestChatBetweenStores, getFirestoreStores, getChatId, getOrCreateChat } from "@/services/firestore";
 import { playNotificationSound } from "@/services/notificationSound";
 
 function ChatItem({ chat, onPress, currentUid }: { chat: FirestoreChat; onPress: () => void; currentUid: string }) {
@@ -86,12 +91,43 @@ function ChatItem({ chat, onPress, currentUid }: { chat: FirestoreChat; onPress:
   );
 }
 
+interface FirestoreStoreItem {
+  id: string;
+  name?: string;
+  avatar?: string;
+  category?: string;
+  ownerId?: string;
+  city?: string;
+}
+
+function StorePickerItem({ store, onPress }: { store: FirestoreStoreItem; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.storePickerItem} onPress={onPress} activeOpacity={0.7}>
+      <Image
+        source={{ uri: store.avatar || "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=200&h=200&fit=crop" }}
+        style={styles.storePickerAvatar}
+      />
+      <View style={styles.storePickerInfo}>
+        <Text style={styles.storePickerName} numberOfLines={1}>{store.name || "Mağaza"}</Text>
+        <Text style={styles.storePickerCategory} numberOfLines={1}>
+          {[store.category, store.city].filter(Boolean).join(" · ") || "Mağaza"}
+        </Text>
+      </View>
+      <View style={styles.storePickerArrow}>
+        <MessageSquarePlus size={18} color={Colors.accent} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 export default function ChatsScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { profile, updateProfile, isSubscriptionActive, isTrialExpired, isLoggedIn, uid } = useUser();
   const { showAlert } = useAlert();
   const welcomeSentRef = React.useRef(false);
+  const [showStorePicker, setShowStorePicker] = useState<boolean>(false);
+  const [storeSearch, setStoreSearch] = useState<string>("");
 
   const testChatMutation = useMutation({
     mutationFn: () => createTestChatBetweenStores(),
@@ -107,6 +143,80 @@ export default function ChatsScreen() {
       showAlert("Hata", "Test sohbeti oluşturulurken bir hata oluştu.");
     },
   });
+
+  const storesQuery = useQuery({
+    queryKey: ["firestoreStores"],
+    queryFn: () => getFirestoreStores(),
+    enabled: showStorePicker,
+  });
+
+  const filteredStores = React.useMemo(() => {
+    const allStores = (storesQuery.data ?? []) as FirestoreStoreItem[];
+    const ownStores = allStores.filter((s) => s.ownerId !== uid);
+    if (!storeSearch.trim()) return ownStores;
+    const q = storeSearch.toLowerCase();
+    return ownStores.filter((s) =>
+      (s.name || "").toLowerCase().includes(q) ||
+      (s.category || "").toLowerCase().includes(q) ||
+      (s.city || "").toLowerCase().includes(q)
+    );
+  }, [storesQuery.data, storeSearch, uid]);
+
+  const startChatMutation = useMutation({
+    mutationFn: async (store: FirestoreStoreItem) => {
+      if (!uid) throw new Error("Giriş yapmalısınız");
+      const storeOwnerId = store.ownerId || store.id;
+      const chatId = getChatId(uid, store.id);
+      await getOrCreateChat({
+        chatId,
+        userId: uid,
+        storeId: store.id,
+        storeName: store.name || "Mağaza",
+        storeAvatar: store.avatar || "",
+        storeOwnerId,
+        customerName: profile.name || profile.firstName || "Müşteri",
+        customerAvatar: profile.avatar,
+      });
+      return { chatId, store, storeOwnerId };
+    },
+    onSuccess: ({ chatId, store, storeOwnerId }) => {
+      setShowStorePicker(false);
+      setStoreSearch("");
+      queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+      router.push({
+        pathname: "/chat/[id]" as RelativePathString,
+        params: {
+          id: chatId,
+          storeId: store.id,
+          storeName: store.name || "Mağaza",
+          storeAvatar: store.avatar || "",
+          storeOwnerId,
+          isOnline: "true",
+        },
+      });
+    },
+    onError: () => {
+      showAlert("Hata", "Sohbet başlatılırken bir hata oluştu.");
+    },
+  });
+
+  const handleStartChat = useCallback(() => {
+    if (!isLoggedIn) {
+      showAlert(
+        "Üye Olun",
+        "Sohbet başlatabilmek için üye olmanız gerekmektedir.",
+        [
+          { text: "Vazgeç", style: "cancel" },
+          { text: "Giriş Yap / Üye Ol", onPress: () => router.push("/login" as any) },
+        ]
+      );
+      return;
+    }
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setShowStorePicker(true);
+  }, [isLoggedIn, showAlert, router]);
 
   const isStoreOwner = profile.isStore;
   const subActive = isSubscriptionActive();
@@ -237,6 +347,18 @@ export default function ChatsScreen() {
 
   return (
     <View style={styles.container}>
+      {isLoggedIn && (
+        <TouchableOpacity
+          style={styles.newChatButton}
+          onPress={handleStartChat}
+          testID="new-chat-button"
+          activeOpacity={0.7}
+        >
+          <MessageSquarePlus size={18} color={Colors.white} />
+          <Text style={styles.newChatButtonText}>Sohbet Başlat</Text>
+        </TouchableOpacity>
+      )}
+
       {isLoggedIn && isStoreOwner && (
         <TouchableOpacity
           style={styles.testChatButton}
@@ -336,6 +458,78 @@ export default function ChatsScreen() {
           }
         />
       )}
+
+      <Modal
+        visible={showStorePicker}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => { setShowStorePicker(false); setStoreSearch(""); }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Mağaza Seçin</Text>
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              onPress={() => { setShowStorePicker(false); setStoreSearch(""); }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <X size={22} color={Colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.searchContainer}>
+            <Search size={18} color={Colors.textLight} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Mağaza ara..."
+              placeholderTextColor={Colors.textLight}
+              value={storeSearch}
+              onChangeText={setStoreSearch}
+              autoFocus={false}
+            />
+          </View>
+
+          {storesQuery.isLoading ? (
+            <View style={styles.modalLoading}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+              <Text style={styles.modalLoadingText}>Mağazalar yükleniyor...</Text>
+            </View>
+          ) : filteredStores.length === 0 ? (
+            <View style={styles.modalEmpty}>
+              <Store size={48} color={Colors.textLight} />
+              <Text style={styles.modalEmptyTitle}>
+                {storeSearch ? "Sonuç bulunamadı" : "Henüz mağaza yok"}
+              </Text>
+              <Text style={styles.modalEmptySubtext}>
+                {storeSearch ? "Farklı bir arama deneyin" : "Mağazalar eklendiğinde burada görünecek"}
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredStores}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <StorePickerItem
+                  store={item}
+                  onPress={() => startChatMutation.mutate(item)}
+                />
+              )}
+              contentContainerStyle={styles.storeList}
+              showsVerticalScrollIndicator={false}
+              ItemSeparatorComponent={() => <View style={styles.storeSeparator} />}
+            />
+          )}
+
+          {startChatMutation.isPending && (
+            <View style={styles.chatCreatingOverlay}>
+              <View style={styles.chatCreatingBox}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+                <Text style={styles.chatCreatingText}>Sohbet başlatılıyor...</Text>
+              </View>
+            </View>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -525,13 +719,31 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700" as const,
   },
-  testChatButton: {
+  newChatButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     marginHorizontal: 16,
     marginTop: 10,
+    marginBottom: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+  },
+  newChatButtonText: {
+    fontSize: 14,
+    fontWeight: "700" as const,
+    color: Colors.white,
+  },
+  testChatButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 6,
     marginBottom: 4,
     paddingVertical: 10,
     paddingHorizontal: 16,
@@ -544,5 +756,146 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600" as const,
     color: "#6366F1",
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: Colors.white,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === "ios" ? 16 : 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700" as const,
+    color: Colors.text,
+  },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.background,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: Colors.text,
+    paddingVertical: 0,
+  },
+  storeList: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 40,
+  },
+  storeSeparator: {
+    height: 1,
+    backgroundColor: Colors.borderLight,
+    marginLeft: 64,
+  },
+  storePickerItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    gap: 12,
+  },
+  storePickerAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.border,
+  },
+  storePickerInfo: {
+    flex: 1,
+  },
+  storePickerName: {
+    fontSize: 15,
+    fontWeight: "600" as const,
+    color: Colors.text,
+  },
+  storePickerCategory: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  storePickerArrow: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#E8F5E9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalLoading: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  modalLoadingText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  modalEmpty: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 40,
+    gap: 8,
+  },
+  modalEmptyTitle: {
+    fontSize: 16,
+    fontWeight: "600" as const,
+    color: Colors.text,
+    marginTop: 8,
+  },
+  modalEmptySubtext: {
+    fontSize: 14,
+    color: Colors.textLight,
+    textAlign: "center",
+  },
+  chatCreatingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chatCreatingBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: Colors.white,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  chatCreatingText: {
+    fontSize: 14,
+    fontWeight: "600" as const,
+    color: Colors.text,
   },
 });
