@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, Stack, useRouter } from "expo-router";
-import { Send, Check, CheckCheck, Paperclip, Smile, MapPin, MoreVertical, Trash2 } from "lucide-react-native";
+import { Send, CheckCheck, Paperclip, Smile, MapPin, MoreVertical, Trash2 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -26,6 +26,7 @@ import {
   sendChatMessage,
   getOrCreateChat,
   clearChatMessages,
+  markMessagesAsRead,
   FirestoreMessage,
   BUTIKBIZ_ADMIN_ID,
   BUTIKBIZ_NAME,
@@ -82,9 +83,9 @@ function MessageBubble({ message }: { message: DisplayMessage }) {
           </Text>
           {message.isSent && (
             message.isRead ? (
-              <CheckCheck size={14} color={Colors.accent} />
+              <CheckCheck size={14} color="#34B7F1" />
             ) : (
-              <Check size={14} color="rgba(255,255,255,0.6)" />
+              <CheckCheck size={14} color="#92A4A3" />
             )
           )}
         </View>
@@ -116,7 +117,7 @@ function ProductMessageBubble({ product, timestamp }: { product: ProductCard; ti
         </View>
         <View style={[styles.messageFooter, { paddingHorizontal: 12, paddingBottom: 6 }]}>
           <Text style={[styles.timestamp, styles.sentTimestamp]}>{timestamp}</Text>
-          <Check size={14} color="rgba(255,255,255,0.6)" />
+          <CheckCheck size={14} color="#92A4A3" />
         </View>
       </View>
       <View style={styles.sentTail} />
@@ -173,6 +174,20 @@ export default function ChatDetailScreen() {
     enabled: !!id,
     refetchInterval: 5000,
   });
+
+  useEffect(() => {
+    if (id && uid && messagesQuery.data && messagesQuery.data.length > 0) {
+      const hasUnread = messagesQuery.data.some(
+        (msg: FirestoreMessage) => msg.senderId !== uid && !msg.isRead
+      );
+      if (hasUnread) {
+        markMessagesAsRead(id, uid).then(() => {
+          queryClient.invalidateQueries({ queryKey: ["chatMessages", id] });
+          queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+        });
+      }
+    }
+  }, [id, uid, messagesQuery.data, queryClient]);
 
   useEffect(() => {
     if (messagesQuery.data && uid) {

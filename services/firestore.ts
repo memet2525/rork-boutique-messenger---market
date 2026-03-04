@@ -366,6 +366,25 @@ export async function getChatMessages(chatId: string): Promise<FirestoreMessage[
   }
 }
 
+export async function markMessagesAsRead(chatId: string, currentUserId: string): Promise<void> {
+  try {
+    const msgsRef = collection(db, "chats", chatId, "messages");
+    const snapshot = await getDocs(msgsRef);
+    const unreadMessages = snapshot.docs.filter((d) => {
+      const data = d.data();
+      return data.senderId !== currentUserId && !data.isRead;
+    });
+    if (unreadMessages.length === 0) return;
+    const updatePromises = unreadMessages.map((d) =>
+      updateDoc(d.ref, { isRead: true })
+    );
+    await Promise.all(updatePromises);
+    console.log("Marked", unreadMessages.length, "messages as read in chat:", chatId);
+  } catch (error) {
+    console.log("Error marking messages as read:", error);
+  }
+}
+
 export async function clearChatMessages(chatId: string): Promise<void> {
   try {
     const msgsRef = collection(db, "chats", chatId, "messages");
