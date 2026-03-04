@@ -11,19 +11,21 @@ import {
   Platform,
 } from "react-native";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
-import { Search, Star, MapPin, LogIn, X, SlidersHorizontal, Download } from "lucide-react-native";
+import { useRouter, RelativePathString } from "expo-router";
+import { Search, Star, MapPin, LogIn, X, Download, MessageCircle } from "lucide-react-native";
+import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { stores, Store, Product } from "@/mocks/stores";
 import { useUser } from "@/contexts/UserContext";
-import { getFirestoreStores } from "@/services/firestore";
+import { useAlert } from "@/contexts/AlertContext";
+import { getFirestoreStores, getChatId } from "@/services/firestore";
 
 const CATEGORIES = ["Tümü", "Moda", "Teknoloji", "Gıda", "Dekorasyon", "Spor", "Butik", "Diğer"];
 
-function StoreCard({ store, onPress }: { store: Store; onPress: () => void }) {
+function StoreCard({ store, onPress, onMessagePress, onProductPress }: { store: Store; onPress: () => void; onMessagePress: () => void; onProductPress: (productId: string) => void }) {
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
   const handlePressIn = useCallback(() => {
@@ -82,17 +84,21 @@ function StoreCard({ store, onPress }: { store: Store; onPress: () => void }) {
 
         <View style={styles.productsRow}>
           {store.products.slice(0, 2).map((product) => (
-            <View key={product.id} style={styles.productItem}>
+            <TouchableOpacity key={product.id} style={styles.productItem} onPress={() => onProductPress(product.id)} activeOpacity={0.7}>
               <Image source={{ uri: product.image }} style={styles.productImage} />
               <Text style={styles.productName} numberOfLines={1}>{product.name}</Text>
               <Text style={styles.productPrice}>{product.price}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
 
         <View style={styles.cardFooter}>
-          <TouchableOpacity style={styles.messageButton} onPress={onPress}>
-            <Text style={styles.messageButtonText}>Mağazaya Git</Text>
+          <TouchableOpacity style={styles.storeGoButton} onPress={onPress}>
+            <Text style={styles.storeGoButtonText}>Mağazaya Git</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.chatButton} onPress={onMessagePress} activeOpacity={0.7}>
+            <MessageCircle size={18} color={Colors.white} />
+            <Text style={styles.chatButtonText}>Satıcıya Yaz</Text>
           </TouchableOpacity>
         </View>
       </Pressable>
@@ -112,6 +118,7 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
 export default function MarketplaceScreen() {
   const router = useRouter();
   const { profile, isLoggedIn, uid } = useUser();
+  const { showAlert } = useAlert();
   const [installPrompt, setInstallPrompt] = useState<any>(deferredPrompt);
   const [isStandalone, setIsStandalone] = useState<boolean>(false);
 
@@ -221,9 +228,51 @@ export default function MarketplaceScreen() {
     router.push(`/store/${storeId}` as any);
   }, [router]);
 
+  const handleMessagePress = useCallback((store: Store) => {
+    if (!isLoggedIn) {
+      showAlert(
+        "Üye Olun",
+        "Satıcıya mesaj yazabilmek için üye olmanız gerekmektedir.",
+        [
+          { text: "Vazgeç", style: "cancel" },
+          { text: "Giriş Yap / Üye Ol", onPress: () => router.push("/login" as any) },
+        ]
+      );
+      return;
+    }
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    const storeOwnerId = store.id;
+    const chatId = getChatId(uid ?? "anon", storeOwnerId);
+    router.push({
+      pathname: "/chat/[id]" as RelativePathString,
+      params: {
+        id: chatId,
+        storeId: store.id,
+        storeName: store.name,
+        storeAvatar: store.avatar,
+        storeOwnerId: storeOwnerId,
+        isOnline: store.isOnline ? "true" : "false",
+      },
+    });
+  }, [isLoggedIn, uid, router, showAlert]);
+
+  const handleProductPress = useCallback((productId: string, storeId: string, storeOwnerId: string) => {
+    router.push({
+      pathname: "/product/[id]" as RelativePathString,
+      params: { id: productId, storeId, storeOwnerId },
+    });
+  }, [router]);
+
   const renderStore = useCallback(({ item }: { item: Store }) => (
-    <StoreCard store={item} onPress={() => handleStorePress(item.id)} />
-  ), [handleStorePress]);
+    <StoreCard
+      store={item}
+      onPress={() => handleStorePress(item.id)}
+      onMessagePress={() => handleMessagePress(item)}
+      onProductPress={(productId) => handleProductPress(productId, item.id, item.id)}
+    />
+  ), [handleStorePress, handleMessagePress, handleProductPress]);
 
   const [searchFocused, setSearchFocused] = useState<boolean>(false);
   const searchInputRef = useRef<TextInput>(null);
@@ -592,18 +641,38 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   cardFooter: {
+    flexDirection: "row",
     paddingHorizontal: 14,
     paddingBottom: 14,
+    gap: 8,
   },
-  messageButton: {
+  storeGoButton: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    paddingVertical: 11,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  storeGoButtonText: {
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: "700" as const,
+  },
+  chatButton: {
+    flex: 1,
+    flexDirection: "row",
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingVertical: 11,
     alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
   },
-  messageButtonText: {
+  chatButtonText: {
     color: Colors.white,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700" as const,
   },
   emptyContainer: {
