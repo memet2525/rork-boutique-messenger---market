@@ -225,8 +225,14 @@ export async function getOrCreateChat(params: {
 }): Promise<FirestoreChat> {
   try {
     const chatRef = doc(db, "chats", params.chatId);
-    const chatSnap = await getDoc(chatRef);
-    if (chatSnap.exists()) {
+    let chatSnap: any = null;
+    try {
+      chatSnap = await getDoc(chatRef);
+    } catch (readErr: any) {
+      console.log("Chat read failed (may not exist yet):", readErr?.code, readErr?.message);
+      chatSnap = null;
+    }
+    if (chatSnap && chatSnap.exists()) {
       return { id: chatSnap.id, ...chatSnap.data() } as FirestoreChat;
     }
     const newChat: Omit<FirestoreChat, "id"> = {
