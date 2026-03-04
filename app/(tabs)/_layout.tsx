@@ -2,15 +2,26 @@ import { Tabs, useRouter } from "expo-router";
 import { Store, MessageCircle, User, Home } from "lucide-react-native";
 import React, { useCallback } from "react";
 import { Platform, StyleSheet, View } from "react-native";
+import { useQuery } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { useUser } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
+import { getUnreadMessageCount } from "@/services/firestore";
 
 export default function TabLayout() {
-  const { isLoggedIn } = useUser();
+  const { isLoggedIn, uid } = useUser();
   const router = useRouter();
   const { showAlert } = useAlert();
+
+  const unreadQuery = useQuery({
+    queryKey: ["unreadCount", uid],
+    queryFn: () => getUnreadMessageCount(uid!),
+    enabled: !!uid && isLoggedIn,
+    refetchInterval: 10000,
+  });
+
+  const unreadCount = unreadQuery.data ?? 0;
 
   const handleAuthTab = useCallback((e: { preventDefault: () => void }) => {
     if (!isLoggedIn) {
@@ -75,7 +86,7 @@ export default function TabLayout() {
               <MessageCircle color={color} size={22} strokeWidth={focused ? 2.5 : 1.8} />
             </View>
           ),
-          tabBarBadge: isLoggedIn ? 2 : undefined,
+          tabBarBadge: isLoggedIn && unreadCount > 0 ? unreadCount : undefined,
           tabBarBadgeStyle: {
             backgroundColor: Colors.badge,
             fontSize: 10,

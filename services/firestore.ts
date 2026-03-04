@@ -406,6 +406,31 @@ export async function clearChatMessages(chatId: string): Promise<void> {
   }
 }
 
+export async function getUnreadMessageCount(userId: string): Promise<number> {
+  try {
+    const chatsQuery = query(
+      collection(db, "chats"),
+      where("participants", "array-contains", userId)
+    );
+    const chatsSnapshot = await getDocs(chatsQuery);
+    let totalUnread = 0;
+    for (const chatDoc of chatsSnapshot.docs) {
+      const msgsRef = collection(db, "chats", chatDoc.id, "messages");
+      const msgsSnapshot = await getDocs(msgsRef);
+      const unread = msgsSnapshot.docs.filter((d) => {
+        const data = d.data();
+        return data.senderId !== userId && !data.isRead;
+      });
+      totalUnread += unread.length;
+    }
+    console.log("Total unread messages for user:", userId, "count:", totalUnread);
+    return totalUnread;
+  } catch (error) {
+    console.log("Error getting unread count:", error);
+    return 0;
+  }
+}
+
 export async function getUserChats(userId: string): Promise<FirestoreChat[]> {
   try {
     console.log("getUserChats called for userId:", userId);
