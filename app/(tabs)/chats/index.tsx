@@ -19,7 +19,6 @@ import {
   Bot,
   AlertCircle,
   Crown,
-  FlaskConical,
   X,
   Search,
   Store,
@@ -129,20 +128,7 @@ export default function ChatsScreen() {
   const [showStorePicker, setShowStorePicker] = useState<boolean>(false);
   const [storeSearch, setStoreSearch] = useState<string>("");
 
-  const testChatMutation = useMutation({
-    mutationFn: () => createTestChatBetweenStores(),
-    onSuccess: (chatId) => {
-      if (chatId) {
-        queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
-        showAlert("Test Sohbet", "İki mağaza arasında test sohbeti oluşturuldu! Sohbet listenizde görünecek.");
-      } else {
-        showAlert("Hata", "Test sohbeti oluşturulamadı. En az 2 mağaza olmalı.");
-      }
-    },
-    onError: () => {
-      showAlert("Hata", "Test sohbeti oluşturulurken bir hata oluştu.");
-    },
-  });
+
 
   const storesQuery = useQuery({
     queryKey: ["firestoreStores"],
@@ -359,20 +345,7 @@ export default function ChatsScreen() {
         </TouchableOpacity>
       )}
 
-      {isLoggedIn && isStoreOwner && (
-        <TouchableOpacity
-          style={styles.testChatButton}
-          onPress={() => testChatMutation.mutate()}
-          disabled={testChatMutation.isPending}
-          testID="test-chat-button"
-          activeOpacity={0.7}
-        >
-          <FlaskConical size={16} color="#6366F1" />
-          <Text style={styles.testChatButtonText}>
-            {testChatMutation.isPending ? "Oluşturuluyor..." : "Test Sohbeti Başlat"}
-          </Text>
-        </TouchableOpacity>
-      )}
+
 
       {isStoreOwner && (showPaymentWarning || showSubExpiredWarning) && (
         <View style={styles.warningBanner}>
@@ -388,36 +361,7 @@ export default function ChatsScreen() {
         </View>
       )}
 
-      {isStoreOwner && (
-        <View style={styles.aiToggleSection}>
-          <View style={styles.aiToggleLeft}>
-            <Bot size={20} color={profile.aiAutoReplyEnabled ? Colors.accent : Colors.textLight} />
-            <View>
-              <Text style={styles.aiToggleTitle}>AI Otomatik Yanit</Text>
-              <Text style={styles.aiToggleSubtitle}>
-                {isPro ? (profile.aiAutoReplyEnabled ? "Acik" : "Kapali") : "Pro ozellik"}
-              </Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.aiToggleBtn,
-              profile.aiAutoReplyEnabled && isPro && styles.aiToggleBtnActive,
-              !isPro && styles.aiToggleBtnLocked,
-            ]}
-            onPress={handleToggleAI}
-            testID="ai-toggle"
-          >
-            {!isPro && <Crown size={14} color="#F59E0B" />}
-            <Text style={[
-              styles.aiToggleBtnText,
-              profile.aiAutoReplyEnabled && isPro && styles.aiToggleBtnTextActive,
-            ]}>
-              {isPro ? (profile.aiAutoReplyEnabled ? "Acik" : "Kapat") : "Pro"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
+
 
       {!isLoggedIn ? (
         <View style={styles.emptyContainer}>
@@ -563,58 +507,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     lineHeight: 17,
   },
-  aiToggleSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#F8FAFC",
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  aiToggleLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  aiToggleTitle: {
-    fontSize: 14,
-    fontWeight: "600" as const,
-    color: Colors.text,
-  },
-  aiToggleSubtitle: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 1,
-  },
-  aiToggleBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.background,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  aiToggleBtnActive: {
-    backgroundColor: Colors.accent,
-    borderColor: Colors.accent,
-  },
-  aiToggleBtnLocked: {
-    backgroundColor: "#FFFBEB",
-    borderColor: "#FDE68A",
-  },
-  aiToggleBtnText: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: Colors.textSecondary,
-  },
-  aiToggleBtnTextActive: {
-    color: Colors.white,
-  },
+
   listContent: {
     flexGrow: 1,
   },
@@ -737,26 +630,7 @@ const styles = StyleSheet.create({
     fontWeight: "700" as const,
     color: Colors.white,
   },
-  testChatButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginHorizontal: 16,
-    marginTop: 6,
-    marginBottom: 4,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    backgroundColor: "#EEF2FF",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#C7D2FE",
-  },
-  testChatButtonText: {
-    fontSize: 13,
-    fontWeight: "600" as const,
-    color: "#6366F1",
-  },
+
   modalContainer: {
     flex: 1,
     backgroundColor: Colors.white,
