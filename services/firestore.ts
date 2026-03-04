@@ -493,21 +493,60 @@ export async function saveAddressToStoreOwner(
   }
 ): Promise<boolean> {
   try {
-    console.log("saveAddressToStoreOwner called with storeOwnerId:", storeOwnerId, "addressId:", address.id);
-    const addressRef = doc(db, "stores", storeOwnerId, "addresses", address.id);
+    if (!storeOwnerId || storeOwnerId === "unknown" || storeOwnerId.trim() === "") {
+      console.log("saveAddressToStoreOwner: invalid storeOwnerId:", storeOwnerId);
+      throw new Error("Geçersiz mağaza bilgisi. Lütfen tekrar deneyin.");
+    }
+
+    const addressId = address.id || `addr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    console.log("saveAddressToStoreOwner called with storeOwnerId:", storeOwnerId, "addressId:", addressId);
+
     const savedAt = new Date().toISOString();
-    const cleanAddress: Record<string, any> = { ...address, savedAt };
+    const cleanAddress: Record<string, any> = {
+      id: addressId,
+      storeId: address.storeId || storeOwnerId,
+      customerName: address.customerName,
+      customerPhone: address.customerPhone,
+      city: address.city,
+      district: address.district,
+      addressLine: address.addressLine,
+      note: address.note || "",
+      createdAt: address.createdAt || savedAt,
+      savedAt,
+    };
+
+    if (address.productInfo && address.productInfo.trim() !== "") {
+      cleanAddress.productInfo = address.productInfo;
+    }
+    if (address.neighborhood && address.neighborhood.trim() !== "") {
+      cleanAddress.neighborhood = address.neighborhood;
+    }
+    if (address.postalCode && address.postalCode.trim() !== "") {
+      cleanAddress.postalCode = address.postalCode;
+    }
+
     Object.keys(cleanAddress).forEach((key) => {
-      if (cleanAddress[key] === undefined) {
+      if (cleanAddress[key] === undefined || cleanAddress[key] === null) {
         delete cleanAddress[key];
       }
     });
+
+    console.log("saveAddressToStoreOwner: writing to path stores/" + storeOwnerId + "/addresses/" + addressId);
+    console.log("saveAddressToStoreOwner: cleanAddress keys:", Object.keys(cleanAddress));
+
+    const addressRef = doc(db, "stores", storeOwnerId, "addresses", addressId);
     await setDoc(addressRef, cleanAddress);
-    console.log("Address saved to store subcollection:", storeOwnerId, "address:", address.id);
+    console.log("Address saved successfully to store subcollection:", storeOwnerId, "address:", addressId);
     return true;
   } catch (error: any) {
     console.log("Error saving address to store:", error?.code, error?.message, error);
-    throw new Error(error?.message || "Adres kaydedilemedi");
+    if (error?.code === "permission-denied" || error?.code === "PERMISSION_DENIED") {
+      throw new Error("Yetkilendirme hatası. Lütfen giriş yapın ve tekrar deneyin.");
+    }
+    if (error?.code === "not-found") {
+      throw new Error("Mağaza bulunamadı. Lütfen tekrar deneyin.");
+    }
+    throw new Error(error?.message || "Adres kaydedilemedi. Lütfen tekrar deneyin.");
   }
 }
 

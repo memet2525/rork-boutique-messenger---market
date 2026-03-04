@@ -46,8 +46,25 @@ export default function AddressFormScreen() {
 
   const submitMutation = useMutation({
     mutationFn: async () => {
-      const addressData = {
-        id: `addr_${Date.now()}`,
+      const targetId = storeOwnerId || storeId;
+      if (!targetId || targetId.trim() === "") {
+        console.log("No valid store target. storeOwnerId:", storeOwnerId, "storeId:", storeId);
+        throw new Error("Mağaza bilgisi bulunamadı. Lütfen tekrar deneyin.");
+      }
+
+      const addressData: {
+        id: string;
+        storeId: string;
+        customerName: string;
+        customerPhone: string;
+        city: string;
+        district: string;
+        addressLine: string;
+        note: string;
+        productInfo?: string;
+        createdAt: string;
+      } = {
+        id: `addr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
         storeId: storeId ?? "unknown",
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
@@ -55,24 +72,17 @@ export default function AddressFormScreen() {
         district: district.trim(),
         addressLine: addressLine.trim(),
         note: note.trim(),
-        ...(productInfo ? { productInfo } : {}),
         createdAt: new Date().toISOString(),
       };
 
-      if (storeOwnerId) {
-        console.log("Saving address to store owner:", storeOwnerId);
-        const success = await saveAddressToStoreOwner(storeOwnerId, addressData);
-        if (!success) {
-          throw new Error("Adres kaydedilemedi");
-        }
-      } else if (storeId) {
-        console.log("Saving address to store owner by storeId:", storeId);
-        const success = await saveAddressToStoreOwner(storeId, addressData);
-        if (!success) {
-          throw new Error("Adres kaydedilemedi");
-        }
-      } else {
-        throw new Error("Mağaza bilgisi bulunamadı");
+      if (productInfo && productInfo.trim() !== "") {
+        addressData.productInfo = productInfo.trim();
+      }
+
+      console.log("Saving address to target:", targetId, "storeOwnerId:", storeOwnerId, "storeId:", storeId);
+      const success = await saveAddressToStoreOwner(targetId, addressData);
+      if (!success) {
+        throw new Error("Adres kaydedilemedi");
       }
 
       return addressData;

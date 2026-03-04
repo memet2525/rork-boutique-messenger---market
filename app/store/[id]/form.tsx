@@ -79,8 +79,25 @@ export default function StoreAddressFormScreen() {
 
   const submitMutation = useMutation({
     mutationFn: async () => {
-      const addressData = {
-        id: `addr_${Date.now()}`,
+      const targetId = resolvedStore.ownerId || resolvedStore.id;
+      if (!targetId || targetId === "unknown" || targetId.trim() === "") {
+        console.log("No valid store target ID found. resolvedStore:", JSON.stringify(resolvedStore));
+        throw new Error("Mağaza bilgisi bulunamadı. Lütfen sayfayı yenileyip tekrar deneyin.");
+      }
+
+      const addressData: {
+        id: string;
+        storeId: string;
+        customerName: string;
+        customerPhone: string;
+        city: string;
+        district: string;
+        addressLine: string;
+        note: string;
+        productInfo?: string;
+        createdAt: string;
+      } = {
+        id: `addr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
         storeId: resolvedStore.id,
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
@@ -88,13 +105,15 @@ export default function StoreAddressFormScreen() {
         district: district.trim(),
         addressLine: addressLine.trim(),
         note: note.trim(),
-        productInfo: productInfoParam ?? undefined,
         createdAt: new Date().toISOString(),
       };
 
-      const storeDocId = resolvedStore.id;
-      console.log("Saving address to store doc:", storeDocId, "ownerId:", resolvedStore.ownerId);
-      const success = await saveAddressToStoreOwner(storeDocId, addressData);
+      if (productInfoParam && productInfoParam.trim() !== "") {
+        addressData.productInfo = productInfoParam.trim();
+      }
+
+      console.log("Saving address to store doc:", targetId, "ownerId:", resolvedStore.ownerId, "storeId:", resolvedStore.id);
+      const success = await saveAddressToStoreOwner(targetId, addressData);
       if (!success) {
         throw new Error("Adres kaydedilemedi");
       }
