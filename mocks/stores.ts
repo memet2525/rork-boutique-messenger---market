@@ -19,6 +19,7 @@ export interface Store {
   reviewCount: number;
   isOnline: boolean;
   products: Product[];
+  ownerId?: string;
 }
 
 export const stores: Store[] = [

@@ -246,11 +246,42 @@ export async function getOrCreateChat(params: {
       updatedAt: serverTimestamp(),
     };
     await setDoc(chatRef, newChat);
-    console.log("Chat created:", params.chatId);
+    console.log("Chat created:", params.chatId, "participants:", [params.userId, params.storeOwnerId]);
+
+    if (params.storeOwnerId && params.storeOwnerId !== params.userId) {
+      sendChatNotification(
+        params.storeOwnerId,
+        params.customerName || "Bir kullanıcı",
+        `${params.customerName || "Bir kullanıcı"} sizinle sohbet başlattı.`
+      ).catch((err) => console.log("Chat notification error:", err));
+    }
+
     return { id: params.chatId, ...newChat };
   } catch (error) {
     console.log("Error creating chat:", error);
     throw error;
+  }
+}
+
+export async function sendChatNotification(
+  targetUid: string,
+  senderName: string,
+  message: string
+): Promise<void> {
+  try {
+    const notification = {
+      id: `chat_notif_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      title: "Yeni Sohbet",
+      message,
+      type: "chat",
+      createdAt: new Date().toISOString(),
+      read: false,
+      senderName,
+    };
+    await sendSystemNotification(targetUid, notification);
+    console.log("Chat notification sent to:", targetUid, "from:", senderName);
+  } catch (error) {
+    console.log("Error sending chat notification:", error);
   }
 }
 
@@ -280,6 +311,28 @@ export async function sendChatMessage(chatId: string, message: {
       lastMessageTimestamp: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+
+    try {
+      const chatSnap = await getDoc(chatRef);
+      if (chatSnap.exists()) {
+        const chatData = chatSnap.data();
+        const participants = (chatData.participants as string[]) ?? [];
+        const recipientId = participants.find((p) => p !== message.senderId);
+        if (recipientId) {
+          const senderName = message.senderId === chatData.storeOwnerId
+            ? (chatData.storeName as string) ?? "Ma\u011faza"
+            : (chatData.customerName as string) ?? "Kullan\u0131c\u0131";
+          const shortText = message.text.length > 60 ? message.text.substring(0, 60) + "..." : message.text;
+          sendChatNotification(
+            recipientId,
+            senderName,
+            `${senderName}: ${shortText}`
+          ).catch((err) => console.log("Message notification error:", err));
+        }
+      }
+    } catch (notifErr) {
+      console.log("Error sending message notification:", notifErr);
+    }
 
     console.log("Message sent:", msgId, "to chat:", chatId);
     return msgData;

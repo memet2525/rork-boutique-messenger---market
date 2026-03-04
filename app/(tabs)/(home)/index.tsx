@@ -211,6 +211,7 @@ export default function MarketplaceScreen() {
         reviewCount: (fs.reviewCount as number) ?? 0,
         isOnline: (fs.isOnline as boolean) ?? true,
         products: ((fs.products as Product[]) ?? []),
+        ownerId: (fs.ownerId as string) ?? undefined,
       });
     }
     return list;
@@ -243,8 +244,9 @@ export default function MarketplaceScreen() {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    const storeOwnerId = store.id;
+    const storeOwnerId = store.ownerId || store.id;
     const chatId = getChatId(uid ?? "anon", storeOwnerId);
+    console.log("Starting chat from home - storeOwnerId:", storeOwnerId, "storeId:", store.id, "chatId:", chatId);
     router.push({
       pathname: "/chat/[id]" as RelativePathString,
       params: {
@@ -258,10 +260,10 @@ export default function MarketplaceScreen() {
     });
   }, [isLoggedIn, uid, router, showAlert]);
 
-  const handleProductPress = useCallback((productId: string, storeId: string, storeOwnerId: string) => {
+  const handleProductPress = useCallback((productId: string, storeId: string, resolvedOwnerId: string) => {
     router.push({
       pathname: "/product/[id]" as RelativePathString,
-      params: { id: productId, storeId, storeOwnerId },
+      params: { id: productId, storeId, storeOwnerId: resolvedOwnerId },
     });
   }, [router]);
 
@@ -270,7 +272,7 @@ export default function MarketplaceScreen() {
       store={item}
       onPress={() => handleStorePress(item.id)}
       onMessagePress={() => handleMessagePress(item)}
-      onProductPress={(productId) => handleProductPress(productId, item.id, item.id)}
+      onProductPress={(productId) => handleProductPress(productId, item.id, item.ownerId || item.id)}
     />
   ), [handleStorePress, handleMessagePress, handleProductPress]);
 

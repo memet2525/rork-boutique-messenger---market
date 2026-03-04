@@ -187,9 +187,12 @@ export default function ProductDetailScreen() {
 
   const resolvedStoreOwnerId = useMemo(() => {
     if (storeOwnerIdParam) return storeOwnerIdParam;
+    if (firestoreStoreQuery.data && firestoreStoreQuery.data.ownerId) {
+      return firestoreStoreQuery.data.ownerId as string;
+    }
     const targetStoreId = storeData?.id ?? storeId ?? "unknown";
     return targetStoreId;
-  }, [storeOwnerIdParam, storeData, storeId]);
+  }, [storeOwnerIdParam, storeData, storeId, firestoreStoreQuery.data]);
 
   const handleMessageStore = useCallback(() => {
     if (!isLoggedIn) {
@@ -206,6 +209,7 @@ export default function ProductDetailScreen() {
     const targetStoreId = storeData?.id ?? storeId ?? "unknown";
     const chatId = getChatId(uid ?? "anon", resolvedStoreOwnerId);
     const productInfo = `🛍️ ${productData?.name}\n💰 ${productData?.price}\n\nBu ürün hakkında bilgi almak istiyorum.`;
+    console.log("Starting chat from product - storeOwnerId:", resolvedStoreOwnerId, "storeId:", targetStoreId, "chatId:", chatId);
     router.push({
       pathname: "/chat/[id]" as RelativePathString,
       params: {

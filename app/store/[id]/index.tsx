@@ -213,6 +213,7 @@ export default function StoreDetailScreen() {
                   return;
                 }
                 const chatId = getChatId(uid ?? 'anon', storeOwnerId ?? 'unknown');
+                console.log("Starting chat from store - storeOwnerId:", storeOwnerId, "storeId:", resolvedStoreId, "chatId:", chatId);
                 router.push({
                   pathname: "/chat/[id]" as RelativePathString,
                   params: {
