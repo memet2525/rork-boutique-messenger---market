@@ -202,30 +202,30 @@ export default function ChatDetailScreen() {
       id &&
       uid &&
       storeId &&
-      storeName &&
       !chatInitialized.current
     ) {
       chatInitialized.current = true;
       const storeData = stores.find((s) => s.id === storeId);
       const resolvedOwnerId = storeOwnerIdParam || storeId || "unknown";
-      console.log("Chat init with storeOwnerId:", resolvedOwnerId, "storeId:", storeId);
+      console.log("Chat init with storeOwnerId:", resolvedOwnerId, "storeId:", storeId, "uid:", uid);
 
       getOrCreateChat({
         chatId: id,
         userId: uid,
         storeId: storeId,
-        storeName: storeName ?? "Mağaza",
+        storeName: storeName || "Mağaza",
         storeAvatar: storeAvatar ?? storeData?.avatar ?? "",
         storeOwnerId: resolvedOwnerId,
         customerName: profile.name || profile.firstName || "Müşteri",
         customerAvatar: profile.avatar,
       }).then(() => {
-        console.log("Chat initialized:", id);
+        console.log("Chat created/initialized:", id, "participants:", [uid, resolvedOwnerId]);
+        queryClient.invalidateQueries({ queryKey: ["userChats"] });
       }).catch((err) => {
         console.log("Chat init error:", err);
       });
     }
-  }, [id, uid, storeId, storeName, storeAvatar, storeOwnerIdParam, profile]);
+  }, [id, uid, storeId, storeName, storeAvatar, storeOwnerIdParam, profile, queryClient]);
 
   const { mutate: sendMessageMutate } = useMutation({
     mutationFn: async (text: string) => {

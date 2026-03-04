@@ -309,12 +309,17 @@ export async function getChatMessages(chatId: string): Promise<FirestoreMessage[
 
 export async function getUserChats(userId: string): Promise<FirestoreChat[]> {
   try {
+    console.log("getUserChats called for userId:", userId);
     const q = query(
       collection(db, "chats"),
       where("participants", "array-contains", userId)
     );
     const snapshot = await getDocs(q);
-    const chatsList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreChat));
+    const chatsList = snapshot.docs.map((d) => {
+      const data = d.data();
+      console.log("Chat found:", d.id, "participants:", data.participants, "storeName:", data.storeName);
+      return { id: d.id, ...data } as FirestoreChat;
+    });
     chatsList.sort((a, b) => {
       const timeA = a.updatedAt?.seconds ?? 0;
       const timeB = b.updatedAt?.seconds ?? 0;
@@ -322,8 +327,8 @@ export async function getUserChats(userId: string): Promise<FirestoreChat[]> {
     });
     console.log("Loaded", chatsList.length, "chats for user:", userId);
     return chatsList;
-  } catch (error) {
-    console.log("Error loading user chats:", error);
+  } catch (error: any) {
+    console.log("Error loading user chats:", error?.code, error?.message, error);
     return [];
   }
 }

@@ -13,7 +13,7 @@ import {
   TextInput,
 } from "react-native";
 import { Image } from "expo-image";
-import { useRouter, RelativePathString } from "expo-router";
+import { useRouter, RelativePathString, useFocusEffect } from "expo-router";
 import {
   MessageSquarePlus,
   Bot,
@@ -228,7 +228,17 @@ export default function ChatsScreen() {
     queryFn: () => getUserChats(uid!),
     enabled: !!uid && isLoggedIn,
     refetchInterval: 5000,
+    refetchIntervalInBackground: true,
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      if (uid && isLoggedIn) {
+        console.log("Chats screen focused, refetching chats for:", uid);
+        queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+      }
+    }, [uid, isLoggedIn, queryClient])
+  );
 
   const handleChatPress = useCallback((chat: FirestoreChat) => {
     if (!isLoggedIn) {
