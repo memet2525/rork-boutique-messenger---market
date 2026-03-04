@@ -27,6 +27,8 @@ import {
   getOrCreateChat,
   clearChatMessages,
   markMessagesAsRead,
+  setTypingStatus,
+  getTypingStatus,
   FirestoreMessage,
   BUTIKBIZ_ADMIN_ID,
   BUTIKBIZ_NAME,
@@ -162,8 +164,72 @@ export default function ChatDetailScreen() {
   const hasInjectedProduct = useRef(false);
   const chatInitialized = useRef(false);
   const prevMessageCountRef = useRef<number>(0);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isOtherTyping, setIsOtherTyping] = useState<boolean>(false);
+  const typingDotAnim = useRef(new Animated.Value(0)).current;
 
   const isAdminChat = storeId === BUTIKBIZ_ADMIN_ID || id?.startsWith("admin_");
+
+  const typingQuery = useQuery({
+    queryKey: ["typingStatus", id, uid],
+    queryFn: () => getTypingStatus(id!, uid!),
+    enabled: !!id && !!uid && !isAdminChat,
+    refetchInterval: 3000,
+  });
+
+  useEffect(() => {
+    if (typingQuery.data !== undefined) {
+      setIsOtherTyping(typingQuery.data);
+    }
+  }, [typingQuery.data]);
+
+  useEffect(() => {
+    if (isOtherTyping) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(typingDotAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+          Animated.timing(typingDotAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+        ])
+      );
+      loop.start();
+      return () => loop.stop();
+    } else {
+      typingDotAnim.setValue(0);
+    }
+  }, [isOtherTyping, typingDotAnim]);
+
+  const handleTextChange = useCallback((text: string) => {
+    setMessageText(text);
+    if (!id || !uid || isAdminChat) return;
+
+    if (text.trim().length > 0) {
+      setTypingStatus(id, uid, true);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      typingTimeoutRef.current = setTimeout(() => {
+        if (id && uid) {
+          setTypingStatus(id, uid, false);
+        }
+      }, 5000);
+    } else {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      setTypingStatus(id, uid, false);
+    }
+  }, [id, uid, isAdminChat]);
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      if (id && uid) {
+        setTypingStatus(id, uid, false);
+      }
+    };
+  }, [id, uid]);
   const resolvedStoreName = isAdminChat ? BUTIKBIZ_NAME : (storeName ?? "Mağaza");
   const resolvedStoreAvatar = isAdminChat ? BUTIKBIZ_AVATAR : (storeAvatar ?? "");
   const resolvedIsOnline = isOnline === "true";
@@ -328,6 +394,13 @@ export default function ChatDetailScreen() {
       Animated.timing(sendScaleAnim, { toValue: 1, duration: 80, useNativeDriver: true }),
     ]).start();
 
+    if (id && uid) {
+      setTypingStatus(id, uid, false);
+    }
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
     const text = messageText.trim();
     const now = new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
 
@@ -368,9 +441,13 @@ export default function ChatDetailScreen() {
       <Image source={{ uri: resolvedStoreAvatar }} style={styles.headerAvatar} />
       <View>
         <Text style={styles.headerName}>{resolvedStoreName}</Text>
-        <Text style={styles.headerStatus}>
-          {resolvedIsOnline ? "çevrimiçi" : "son görülme bugün"}
-        </Text>
+        {isOtherTyping ? (
+          <Text style={styles.headerTyping}>yazıyor...</Text>
+        ) : (
+          <Text style={styles.headerStatus}>
+            {resolvedIsOnline ? "çevrimiçi" : "son görülme bugün"}
+          </Text>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -467,7 +544,7 @@ export default function ChatDetailScreen() {
                 placeholder="Mesaj yazın..."
                 placeholderTextColor={Colors.textLight}
                 value={messageText}
-                onChangeText={setMessageText}
+                onChangeText={handleTextChange}
                 multiline
                 maxLength={1000}
                 testID="message-input"
@@ -543,6 +620,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "rgba(255,255,255,0.7)",
     lineHeight: 13,
+  },
+  headerTyping: {
+    fontSize: 10,
+    color: "#A5F5A5",
+    lineHeight: 13,
+    fontWeight: "500" as const,
   },
   chatArea: {
     flex: 1,

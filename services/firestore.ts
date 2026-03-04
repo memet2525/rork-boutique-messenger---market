@@ -743,6 +743,37 @@ export async function createTestChatBetweenStores(): Promise<string | null> {
   }
 }
 
+export async function setTypingStatus(chatId: string, userId: string, isTyping: boolean): Promise<void> {
+  try {
+    const chatRef = doc(db, "chats", chatId);
+    const field = `typing_${userId}`;
+    await updateDoc(chatRef, {
+      [field]: isTyping ? Date.now() : 0,
+    });
+  } catch (error) {
+    console.log("Error setting typing status:", error);
+  }
+}
+
+export async function getTypingStatus(chatId: string, currentUserId: string): Promise<boolean> {
+  try {
+    const chatRef = doc(db, "chats", chatId);
+    const chatSnap = await getDoc(chatRef);
+    if (!chatSnap.exists()) return false;
+    const data = chatSnap.data();
+    const participants = (data.participants as string[]) ?? [];
+    const otherUserId = participants.find((p) => p !== currentUserId);
+    if (!otherUserId) return false;
+    const typingTimestamp = data[`typing_${otherUserId}`] as number | undefined;
+    if (!typingTimestamp || typingTimestamp === 0) return false;
+    const now = Date.now();
+    return now - typingTimestamp < 10000;
+  } catch (error) {
+    console.log("Error getting typing status:", error);
+    return false;
+  }
+}
+
 export async function sendAdminChatToMultipleUsers(
   targetUids: string[],
   messageText: string

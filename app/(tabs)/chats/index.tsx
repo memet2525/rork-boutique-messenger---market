@@ -30,11 +30,19 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
 import { useUser } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
-import { getUserChats, FirestoreChat, BUTIKBIZ_ADMIN_ID, BUTIKBIZ_NAME, BUTIKBIZ_AVATAR, sendAdminChatMessage, createTestChatBetweenStores, getFirestoreStores, getChatId, getOrCreateChat, hideChatForUser } from "@/services/firestore";
+import { getUserChats, FirestoreChat, BUTIKBIZ_ADMIN_ID, BUTIKBIZ_NAME, BUTIKBIZ_AVATAR, sendAdminChatMessage, createTestChatBetweenStores, getFirestoreStores, getChatId, getOrCreateChat, hideChatForUser, getTypingStatus } from "@/services/firestore";
 import { playNotificationSound } from "@/services/notificationSound";
 
 function ChatItem({ chat, onPress, onLongPress, currentUid }: { chat: FirestoreChat; onPress: () => void; onLongPress: () => void; currentUid: string }) {
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
+
+  const typingQuery = useQuery({
+    queryKey: ["typingStatus", chat.id, currentUid],
+    queryFn: () => getTypingStatus(chat.id, currentUid),
+    enabled: !!currentUid && chat.storeOwnerId !== BUTIKBIZ_ADMIN_ID,
+    refetchInterval: 3000,
+  });
+  const isOtherTyping = typingQuery.data ?? false;
 
   const handlePressIn = useCallback(() => {
     Animated.timing(scaleAnim, {
@@ -82,9 +90,13 @@ function ChatItem({ chat, onPress, onLongPress, currentUid }: { chat: FirestoreC
           </View>
           <View style={styles.chatBottomRow}>
             <View style={styles.lastMessageRow}>
-              <Text style={[styles.lastMessage, (chat.unreadCount ?? 0) > 0 && styles.lastMessageUnread]} numberOfLines={1}>
-                {chat.lastMessage || "Henüz mesaj yok"}
-              </Text>
+              {isOtherTyping ? (
+                <Text style={styles.typingText} numberOfLines={1}>yazıyor...</Text>
+              ) : (
+                <Text style={[styles.lastMessage, (chat.unreadCount ?? 0) > 0 && styles.lastMessageUnread]} numberOfLines={1}>
+                  {chat.lastMessage || "Henüz mesaj yok"}
+                </Text>
+              )}
             </View>
             {(chat.unreadCount ?? 0) > 0 && (
               <View style={styles.unreadBadge}>
@@ -724,6 +736,13 @@ const styles = StyleSheet.create({
   lastMessage: {
     fontSize: 14,
     color: Colors.textSecondary,
+    flex: 1,
+  },
+  typingText: {
+    fontSize: 14,
+    color: Colors.accent,
+    fontWeight: "500" as const,
+    fontStyle: "italic" as const,
     flex: 1,
   },
   separator: {
