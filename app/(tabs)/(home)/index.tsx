@@ -25,7 +25,7 @@ import { getFirestoreStores, getChatId } from "@/services/firestore";
 
 const CATEGORIES = ["Tümü", "Moda", "Teknoloji", "Gıda", "Dekorasyon", "Spor", "Butik", "Diğer"];
 
-function StoreCard({ store, onPress, onMessagePress, onProductPress }: { store: Store; onPress: () => void; onMessagePress: () => void; onProductPress: (productId: string) => void }) {
+function StoreCard({ store, onPress, onProductPress }: { store: Store; onPress: () => void; onProductPress: (productId: string) => void }) {
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
   const handlePressIn = useCallback(() => {
@@ -93,12 +93,8 @@ function StoreCard({ store, onPress, onMessagePress, onProductPress }: { store: 
         </View>
 
         <View style={styles.cardFooter}>
-          <TouchableOpacity style={styles.storeGoButton} onPress={onPress}>
+          <TouchableOpacity style={styles.storeGoButtonFull} onPress={onPress}>
             <Text style={styles.storeGoButtonText}>Mağazaya Git</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.chatButton} onPress={onMessagePress} activeOpacity={0.7}>
-            <MessageCircle size={18} color={Colors.white} />
-            <Text style={styles.chatButtonText}>Satıcıya Yaz</Text>
           </TouchableOpacity>
         </View>
       </Pressable>
@@ -271,7 +267,6 @@ export default function MarketplaceScreen() {
     <StoreCard
       store={item}
       onPress={() => handleStorePress(item.id)}
-      onMessagePress={() => handleMessagePress(item)}
       onProductPress={(productId) => handleProductPress(productId, item.id, item.ownerId || item.id)}
     />
   ), [handleStorePress, handleMessagePress, handleProductPress]);
@@ -657,9 +652,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
+  storeGoButtonFull: {
+    flex: 1,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
   storeGoButtonText: {
-    color: Colors.text,
-    fontSize: 13,
+    color: Colors.white,
+    fontSize: 14,
     fontWeight: "700" as const,
   },
   chatButton: {
