@@ -358,54 +358,60 @@ export default function ChatDetailScreen() {
           )}
         </View>
 
-        <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.inputAction}>
-            <Smile size={24} color={Colors.textLight} />
-          </TouchableOpacity>
-          <View style={styles.inputWrapper}>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Mesaj yazın..."
-              placeholderTextColor={Colors.textLight}
-              value={messageText}
-              onChangeText={setMessageText}
-              multiline
-              maxLength={1000}
-              testID="message-input"
-            />
-            <TouchableOpacity
-              style={styles.attachButton}
-              onPress={() => {
-                router.push({
-                  pathname: "/store/[id]/form" as any,
-                  params: {
-                    id: storeId ?? id ?? "unknown",
-                    productInfo: "",
-                  },
-                });
-              }}
-              testID="send-address-form"
-            >
-              <MapPin size={20} color={Colors.accent} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.attachButton}>
-              <Paperclip size={20} color={Colors.textLight} />
-            </TouchableOpacity>
+        {isAdminChat ? (
+          <View style={styles.adminInputDisabled}>
+            <Text style={styles.adminInputDisabledText}>Bu sohbete mesaj gönderemezsiniz</Text>
           </View>
-          <Animated.View style={{ transform: [{ scale: sendScaleAnim }] }}>
-            <TouchableOpacity
-              style={[
-                styles.sendButton,
-                messageText.trim() ? styles.sendButtonActive : {},
-              ]}
-              onPress={handleSend}
-              disabled={!messageText.trim()}
-              testID="send-button"
-            >
-              <Send size={20} color={Colors.white} />
+        ) : (
+          <View style={styles.inputContainer}>
+            <TouchableOpacity style={styles.inputAction}>
+              <Smile size={24} color={Colors.textLight} />
             </TouchableOpacity>
-          </Animated.View>
-        </View>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Mesaj yazın..."
+                placeholderTextColor={Colors.textLight}
+                value={messageText}
+                onChangeText={setMessageText}
+                multiline
+                maxLength={1000}
+                testID="message-input"
+              />
+              <TouchableOpacity
+                style={styles.attachButton}
+                onPress={() => {
+                  router.push({
+                    pathname: "/store/[id]/form" as any,
+                    params: {
+                      id: storeId ?? id ?? "unknown",
+                      productInfo: "",
+                    },
+                  });
+                }}
+                testID="send-address-form"
+              >
+                <MapPin size={20} color={Colors.accent} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.attachButton}>
+                <Paperclip size={20} color={Colors.textLight} />
+              </TouchableOpacity>
+            </View>
+            <Animated.View style={{ transform: [{ scale: sendScaleAnim }] }}>
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  messageText.trim() ? styles.sendButtonActive : {},
+                ]}
+                onPress={handleSend}
+                disabled={!messageText.trim()}
+                testID="send-button"
+              >
+                <Send size={20} color={Colors.white} />
+              </TouchableOpacity>
+            </Animated.View>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </>
   );
@@ -588,6 +594,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 10,
     paddingBottom: 4,
+  },
+  adminInputDisabled: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#F1F5F9",
+    borderTopWidth: 0.5,
+    borderTopColor: Colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adminInputDisabledText: {
+    fontSize: 13,
+    color: Colors.textLight,
+    fontWeight: "500" as const,
   },
   productCardPrice: {
     fontSize: 16,
