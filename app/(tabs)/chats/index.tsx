@@ -17,6 +17,7 @@ import {
   Bot,
   AlertCircle,
   Crown,
+  FlaskConical,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -24,7 +25,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
 import { useUser } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
-import { getUserChats, FirestoreChat, BUTIKBIZ_ADMIN_ID, BUTIKBIZ_NAME, BUTIKBIZ_AVATAR, sendAdminChatMessage } from "@/services/firestore";
+import { getUserChats, FirestoreChat, BUTIKBIZ_ADMIN_ID, BUTIKBIZ_NAME, BUTIKBIZ_AVATAR, sendAdminChatMessage, createTestChatBetweenStores } from "@/services/firestore";
 import { playNotificationSound } from "@/services/notificationSound";
 
 function ChatItem({ chat, onPress, currentUid }: { chat: FirestoreChat; onPress: () => void; currentUid: string }) {
@@ -91,6 +92,21 @@ export default function ChatsScreen() {
   const { profile, updateProfile, isSubscriptionActive, isTrialExpired, isLoggedIn, uid } = useUser();
   const { showAlert } = useAlert();
   const welcomeSentRef = React.useRef(false);
+
+  const testChatMutation = useMutation({
+    mutationFn: () => createTestChatBetweenStores(),
+    onSuccess: (chatId) => {
+      if (chatId) {
+        queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+        showAlert("Test Sohbet", "İki mağaza arasında test sohbeti oluşturuldu! Sohbet listenizde görünecek.");
+      } else {
+        showAlert("Hata", "Test sohbeti oluşturulamadı. En az 2 mağaza olmalı.");
+      }
+    },
+    onError: () => {
+      showAlert("Hata", "Test sohbeti oluşturulurken bir hata oluştu.");
+    },
+  });
 
   const isStoreOwner = profile.isStore;
   const subActive = isSubscriptionActive();
@@ -221,6 +237,21 @@ export default function ChatsScreen() {
 
   return (
     <View style={styles.container}>
+      {isLoggedIn && isStoreOwner && (
+        <TouchableOpacity
+          style={styles.testChatButton}
+          onPress={() => testChatMutation.mutate()}
+          disabled={testChatMutation.isPending}
+          testID="test-chat-button"
+          activeOpacity={0.7}
+        >
+          <FlaskConical size={16} color="#6366F1" />
+          <Text style={styles.testChatButtonText}>
+            {testChatMutation.isPending ? "Oluşturuluyor..." : "Test Sohbeti Başlat"}
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {isStoreOwner && (showPaymentWarning || showSubExpiredWarning) && (
         <View style={styles.warningBanner}>
           <AlertCircle size={18} color="#DC2626" />
@@ -493,5 +524,25 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 15,
     fontWeight: "700" as const,
+  },
+  testChatButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: "#EEF2FF",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+  },
+  testChatButtonText: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    color: "#6366F1",
   },
 });

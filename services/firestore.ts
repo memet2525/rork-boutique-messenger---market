@@ -440,6 +440,93 @@ export async function sendAdminChatMessage(
   }
 }
 
+export async function createTestChatBetweenStores(): Promise<string | null> {
+  try {
+    const storesSnapshot = await getDocs(collection(db, "stores"));
+    const allStores = storesSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    console.log("Found stores:", allStores.map((s: any) => s.name));
+
+    if (allStores.length < 2) {
+      console.log("Not enough stores to create test chat");
+      return null;
+    }
+
+    const storeA = allStores[0] as any;
+    const storeB = allStores[1] as any;
+
+    const ownerA = storeA.ownerId || storeA.id;
+    const ownerB = storeB.ownerId || storeB.id;
+
+    const chatId = `${ownerA}_${ownerB}`;
+    const chatRef = doc(db, "chats", chatId);
+    const chatSnap = await getDoc(chatRef);
+
+    if (chatSnap.exists()) {
+      console.log("Test chat already exists:", chatId);
+      return chatId;
+    }
+
+    const newChat: Omit<FirestoreChat, "id"> = {
+      participants: [ownerA, ownerB],
+      storeId: storeB.id,
+      storeName: storeB.name || "Mağaza B",
+      storeAvatar: storeB.avatar || "",
+      storeOwnerId: ownerB,
+      customerId: ownerA,
+      customerName: storeA.name || "Mağaza A",
+      customerAvatar: storeA.avatar || "",
+      lastMessage: "",
+      lastMessageTime: "",
+      lastMessageTimestamp: serverTimestamp(),
+      isOnline: true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+
+    await setDoc(chatRef, newChat);
+    console.log("Test chat created:", chatId, "between", storeA.name, "and", storeB.name);
+
+    const testMessages = [
+      { text: `Merhaba ${storeB.name}! Ürünlerinizi inceliyorum, çok güzel.`, senderId: ownerA },
+      { text: `Teşekkürler ${storeA.name}! Herhangi bir sorunuz olursa yazabilirsiniz 😊`, senderId: ownerB },
+      { text: "Kargo süreniz ne kadar?", senderId: ownerA },
+      { text: "Genelde 2-3 iş günü içinde teslim ediyoruz.", senderId: ownerB },
+    ];
+
+    for (let i = 0; i < testMessages.length; i++) {
+      const msg = testMessages[i];
+      const msgId = `test_msg_${Date.now()}_${i}`;
+      const now = new Date(Date.now() + i * 60000);
+      const timeStr = now.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+      const msgData: FirestoreMessage = {
+        id: msgId,
+        text: msg.text,
+        senderId: msg.senderId,
+        timestamp: timeStr,
+        createdAt: now.toISOString(),
+        isRead: true,
+      };
+      await setDoc(doc(db, "chats", chatId, "messages", msgId), msgData);
+    }
+
+    const lastMsg = testMessages[testMessages.length - 1];
+    const lastTime = new Date(Date.now() + (testMessages.length - 1) * 60000)
+      .toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+    await updateDoc(chatRef, {
+      lastMessage: lastMsg.text,
+      lastMessageTime: lastTime,
+      lastMessageTimestamp: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    console.log("Test messages added to chat:", chatId);
+    return chatId;
+  } catch (error) {
+    console.log("Error creating test chat:", error);
+    return null;
+  }
+}
+
 export async function sendAdminChatToMultipleUsers(
   targetUids: string[],
   messageText: string
