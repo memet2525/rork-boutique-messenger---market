@@ -55,7 +55,7 @@ export default function AddressFormScreen() {
         district: district.trim(),
         addressLine: addressLine.trim(),
         note: note.trim(),
-        productInfo: productInfo ?? undefined,
+        ...(productInfo ? { productInfo } : {}),
         createdAt: new Date().toISOString(),
       };
 
