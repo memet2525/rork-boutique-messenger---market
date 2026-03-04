@@ -30,10 +30,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
 import { useUser } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
-import { getUserChats, FirestoreChat, BUTIKBIZ_ADMIN_ID, BUTIKBIZ_NAME, BUTIKBIZ_AVATAR, sendAdminChatMessage, createTestChatBetweenStores, getFirestoreStores, getChatId, getOrCreateChat } from "@/services/firestore";
+import { getUserChats, FirestoreChat, BUTIKBIZ_ADMIN_ID, BUTIKBIZ_NAME, BUTIKBIZ_AVATAR, sendAdminChatMessage, createTestChatBetweenStores, getFirestoreStores, getChatId, getOrCreateChat, hideChatForUser } from "@/services/firestore";
 import { playNotificationSound } from "@/services/notificationSound";
 
-function ChatItem({ chat, onPress, currentUid }: { chat: FirestoreChat; onPress: () => void; currentUid: string }) {
+function ChatItem({ chat, onPress, onLongPress, currentUid }: { chat: FirestoreChat; onPress: () => void; onLongPress: () => void; currentUid: string }) {
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
   const handlePressIn = useCallback(() => {
@@ -61,6 +61,8 @@ function ChatItem({ chat, onPress, currentUid }: { chat: FirestoreChat; onPress:
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <Pressable
         onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={500}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         style={styles.chatItem}
@@ -135,6 +137,7 @@ export default function ChatsScreen() {
   const welcomeSentRef = React.useRef(false);
   const [showStorePicker, setShowStorePicker] = useState<boolean>(false);
   const [storeSearch, setStoreSearch] = useState<string>("");
+  const [chatToRemove, setChatToRemove] = useState<FirestoreChat | null>(null);
 
   const testChatMutation = useMutation({
     mutationFn: () => createTestChatBetweenStores(),
@@ -247,6 +250,32 @@ export default function ChatsScreen() {
     }, [uid, isLoggedIn, queryClient])
   );
 
+  const hideChatMutation = useMutation({
+    mutationFn: async (chat: FirestoreChat) => {
+      if (!uid) throw new Error("Giriş yapmalısınız");
+      await hideChatForUser(chat.id, uid);
+      return chat;
+    },
+    onSuccess: () => {
+      setChatToRemove(null);
+      queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    },
+    onError: () => {
+      setChatToRemove(null);
+      showAlert("Hata", "Sohbet kaldırılırken bir hata oluştu.");
+    },
+  });
+
+  const handleChatLongPress = useCallback((chat: FirestoreChat) => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    setChatToRemove(chat);
+  }, []);
+
   const handleChatPress = useCallback((chat: FirestoreChat) => {
     if (!isLoggedIn) {
       showAlert(
@@ -294,8 +323,8 @@ export default function ChatsScreen() {
   }, [isPro, profile.aiAutoReplyEnabled, updateProfile, showAlert]);
 
   const renderChat = useCallback(({ item }: { item: FirestoreChat }) => (
-    <ChatItem chat={item} onPress={() => handleChatPress(item)} currentUid={uid ?? ""} />
-  ), [handleChatPress, uid]);
+    <ChatItem chat={item} onPress={() => handleChatPress(item)} onLongPress={() => handleChatLongPress(item)} currentUid={uid ?? ""} />
+  ), [handleChatPress, handleChatLongPress, uid]);
 
   const renderSeparator = useCallback(() => (
     <View style={styles.separator} />
@@ -453,6 +482,43 @@ export default function ChatsScreen() {
           }
         />
       )}
+
+      <Modal
+        visible={!!chatToRemove}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setChatToRemove(null)}
+      >
+        <Pressable style={styles.removeOverlay} onPress={() => setChatToRemove(null)}>
+          <View style={styles.removeSheet}>
+            <View style={styles.removeSheetHandle} />
+            <Text style={styles.removeSheetTitle}>Sohbeti Kaldır</Text>
+            <Text style={styles.removeSheetDesc}>
+              {chatToRemove ? `"${chatToRemove.storeOwnerId === BUTIKBIZ_ADMIN_ID ? BUTIKBIZ_NAME : (uid === chatToRemove.storeOwnerId ? chatToRemove.customerName : chatToRemove.storeName)}" ile olan sohbeti kaldırmak istediğinize emin misiniz?` : ""}
+            </Text>
+            <Text style={styles.removeSheetHint}>Karşı taraf yeniden mesaj gönderdiğinde sohbet tekrar görünecektir.</Text>
+            <View style={styles.removeSheetActions}>
+              <TouchableOpacity
+                style={styles.removeSheetCancel}
+                onPress={() => setChatToRemove(null)}
+              >
+                <Text style={styles.removeSheetCancelText}>Vazgeç</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.removeSheetConfirm}
+                onPress={() => chatToRemove && hideChatMutation.mutate(chatToRemove)}
+                disabled={hideChatMutation.isPending}
+              >
+                {hideChatMutation.isPending ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={styles.removeSheetConfirmText}>Kaldır</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={showStorePicker}
@@ -922,5 +988,73 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600" as const,
     color: Colors.text,
+  },
+  removeOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  removeSheet: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+    paddingTop: 12,
+  },
+  removeSheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#D1D5DB",
+    alignSelf: "center",
+    marginBottom: 18,
+  },
+  removeSheetTitle: {
+    fontSize: 18,
+    fontWeight: "700" as const,
+    color: Colors.text,
+    marginBottom: 8,
+  },
+  removeSheetDesc: {
+    fontSize: 15,
+    color: Colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: 6,
+  },
+  removeSheetHint: {
+    fontSize: 13,
+    color: Colors.textLight,
+    lineHeight: 18,
+    marginBottom: 22,
+  },
+  removeSheetActions: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  removeSheetCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.background,
+    alignItems: "center",
+  },
+  removeSheetCancelText: {
+    fontSize: 15,
+    fontWeight: "600" as const,
+    color: Colors.text,
+  },
+  removeSheetConfirm: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#DC2626",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  removeSheetConfirmText: {
+    fontSize: 15,
+    fontWeight: "600" as const,
+    color: "#FFFFFF",
   },
 });

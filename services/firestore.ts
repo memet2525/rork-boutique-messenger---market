@@ -9,6 +9,7 @@ import {
   serverTimestamp,
   query,
   where,
+  arrayUnion,
 } from "firebase/firestore";
 import { db } from "@/config/firebase";
 
@@ -317,6 +318,7 @@ export async function sendChatMessage(chatId: string, message: {
       lastMessageTime: timeStr,
       lastMessageTimestamp: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      hiddenBy: [],
     }, { merge: true });
 
     try {
@@ -462,16 +464,38 @@ export async function getUserChats(userId: string): Promise<FirestoreChat[]> {
     });
     await Promise.all(unreadPromises);
 
-    chatsList.sort((a, b) => {
+    const visibleChats = chatsList.filter((chat) => {
+      const hiddenBy = (chat as any).hiddenBy as string[] | undefined;
+      if (hiddenBy && hiddenBy.includes(userId)) {
+        console.log("Chat hidden for user:", chat.id);
+        return false;
+      }
+      return true;
+    });
+
+    visibleChats.sort((a, b) => {
       const timeA = a.updatedAt?.seconds ?? 0;
       const timeB = b.updatedAt?.seconds ?? 0;
       return timeB - timeA;
     });
-    console.log("Loaded", chatsList.length, "chats for user:", userId);
-    return chatsList;
+    console.log("Loaded", visibleChats.length, "visible chats for user:", userId);
+    return visibleChats;
   } catch (error: any) {
     console.log("Error loading user chats:", error?.code, error?.message, error);
     return [];
+  }
+}
+
+export async function hideChatForUser(chatId: string, userId: string): Promise<void> {
+  try {
+    const chatRef = doc(db, "chats", chatId);
+    await updateDoc(chatRef, {
+      hiddenBy: arrayUnion(userId),
+    });
+    console.log("Chat hidden for user:", userId, "chatId:", chatId);
+  } catch (error) {
+    console.log("Error hiding chat:", error);
+    throw error;
   }
 }
 
