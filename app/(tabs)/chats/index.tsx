@@ -383,15 +383,10 @@ export default function ChatsScreen() {
       if (hasPrev) {
         for (const chat of chatsList) {
           const prevMsg = prevMap[chat.id];
-          if (prevMsg !== undefined && chat.lastMessage && chat.lastMessage !== prevMsg) {
-            const isFromOther = chat.storeOwnerId !== uid
-              ? true
-              : chat.customerId !== uid;
-            if (isFromOther) {
-              playNotificationSound();
-              console.log("New message in chat list, playing sound for chat:", chat.id);
-              break;
-            }
+          if (prevMsg !== undefined && chat.lastMessage && chat.lastMessage !== prevMsg && (chat.unreadCount ?? 0) > 0) {
+            playNotificationSound();
+            console.log("New incoming message in chat list, playing sound for chat:", chat.id);
+            break;
           }
         }
       }
