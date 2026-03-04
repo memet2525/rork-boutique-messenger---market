@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo } from "react";
+import React, { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Share,
   Animated,
   Pressable,
+  TextInput,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import {
@@ -23,14 +24,20 @@ import {
   ClipboardList,
   ChevronDown,
   ChevronUp,
+  Search,
+  X,
+  Sparkles,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import * as Print from "expo-print";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import Colors from "@/constants/colors";
 import { useUser, AddressSubmission } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
 import { getAddressFormLink } from "@/utils/links";
+
+const READ_ADDRESSES_KEY = "@read_address_ids";
 
 function generatePrintHtml(address: AddressSubmission, _storeName: string): string {
   const fullAddr = `${address.neighborhood ? address.neighborhood + ", " : ""}${address.addressLine}, ${address.district}/${address.city}${address.postalCode ? " " + address.postalCode : ""}`;
@@ -90,11 +97,13 @@ function generatePrintHtml(address: AddressSubmission, _storeName: string): stri
 </html>`;
 }
 
-function ShippingLabel({ address, onPrint, onShare, onDelete }: {
+function ShippingLabel({ address, onPrint, onShare, onDelete, isNew, onMarkRead }: {
   address: AddressSubmission;
   onPrint: () => void;
   onShare: () => void;
   onDelete: () => void;
+  isNew: boolean;
+  onMarkRead: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState<boolean>(false);
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -106,12 +115,15 @@ function ShippingLabel({ address, onPrint, onShare, onDelete }: {
     }
     const next = !expanded;
     setExpanded(next);
+    if (next && isNew) {
+      onMarkRead(address.id);
+    }
     Animated.timing(expandAnim, {
       toValue: next ? 1 : 0,
       duration: 200,
       useNativeDriver: false,
     }).start();
-  }, [expanded, expandAnim]);
+  }, [expanded, expandAnim, isNew, onMarkRead, address.id]);
 
   const dateStr = useMemo(() => {
     try {
@@ -139,11 +151,18 @@ function ShippingLabel({ address, onPrint, onShare, onDelete }: {
       >
         <View style={styles.labelHeader}>
           <View style={styles.labelHeaderLeft}>
-            <View style={styles.labelIconWrap}>
-              <Package size={18} color={Colors.primary} />
+            <View style={[styles.labelIconWrap, isNew && styles.labelIconWrapNew]}>
+              {isNew ? <Sparkles size={18} color="#fff" /> : <Package size={18} color={Colors.primary} />}
             </View>
             <View style={styles.labelHeaderInfo}>
-              <Text style={styles.labelName}>{address.customerName}</Text>
+              <View style={styles.nameRow}>
+                <Text style={styles.labelName}>{address.customerName}</Text>
+                {isNew && (
+                  <View style={styles.newBadge}>
+                    <Text style={styles.newBadgeText}>Yeni</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.labelCity}>{address.district}/{address.city}</Text>
             </View>
           </View>
@@ -233,10 +252,36 @@ export default function AddressListScreen() {
   const router = useRouter();
   const { profile, deleteAddressSubmission, storeAddresses } = useUser();
   const { showAlert } = useAlert();
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const addresses = useMemo(() => 
     storeAddresses.length > 0 ? storeAddresses : (profile.addressSubmissions ?? []),
     [storeAddresses, profile.addressSubmissions]
   );
+
+  useEffect(() => {
+    AsyncStorage.getItem(READ_ADDRESSES_KEY).then((stored) => {
+      if (stored) {
+        try {
+          const ids = JSON.parse(stored) as string[];
+          setReadIds(new Set(ids));
+        } catch (e) {
+          console.log("Error parsing read addresses:", e);
+        }
+      }
+    });
+  }, []);
+
+  const markAddressRead = useCallback((id: string) => {
+    setReadIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      AsyncStorage.setItem(READ_ADDRESSES_KEY, JSON.stringify([...next])).catch((e) =>
+        console.log("Error saving read addresses:", e)
+      );
+      return next;
+    });
+  }, []);
 
   const handlePrint = useCallback(async (address: AddressSubmission) => {
     if (Platform.OS !== "web") {
@@ -321,6 +366,17 @@ export default function AddressListScreen() {
     [addresses]
   );
 
+  const filteredAddresses = useMemo(() => {
+    if (!searchQuery.trim()) return sortedAddresses;
+    const q = searchQuery.toLowerCase().trim();
+    return sortedAddresses.filter((a) => {
+      const phone = a.customerPhone?.toLowerCase() ?? "";
+      const city = a.city?.toLowerCase() ?? "";
+      const name = a.customerName?.toLowerCase() ?? "";
+      return phone.includes(q) || city.includes(q) || name.includes(q);
+    });
+  }, [sortedAddresses, searchQuery]);
+
   return (
     <>
       <Stack.Screen
@@ -331,23 +387,55 @@ export default function AddressListScreen() {
           headerTitleStyle: { fontWeight: "700" as const },
         }}
       />
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.topBar}>
-          <View style={styles.countBadge}>
-            <ClipboardList size={18} color={Colors.primary} />
-            <Text style={styles.countText}>{addresses.length} adres</Text>
+      <View style={styles.container}>
+        <View style={styles.stickyHeader}>
+          <View style={styles.topBar}>
+            <View style={styles.countBadge}>
+              <ClipboardList size={18} color={Colors.primary} />
+              <Text style={styles.countText}>{addresses.length} adres</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.shareFormBtn}
+              onPress={handleShareForm}
+              testID="share-form-external"
+            >
+              <Share2 size={16} color={Colors.white} />
+              <Text style={styles.shareFormText}>Form Paylaş</Text>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.shareFormBtn}
-            onPress={handleShareForm}
-            testID="share-form-external"
-          >
-            <Share2 size={16} color={Colors.white} />
-            <Text style={styles.shareFormText}>Form Paylaş</Text>
-          </TouchableOpacity>
+          <View style={styles.searchBarWrap}>
+            <Search size={18} color={Colors.textLight} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Telefon, il veya isim ile ara..."
+              placeholderTextColor={Colors.textLight}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              testID="address-search"
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery("")} hitSlop={8}>
+                <X size={18} color={Colors.textLight} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
-        {sortedAddresses.length === 0 ? (
+        <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+        {filteredAddresses.length === 0 && searchQuery.trim() ? (
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIcon}>
+              <Search size={40} color={Colors.textLight} />
+            </View>
+            <Text style={styles.emptyTitle}>Sonuç bulunamadı</Text>
+            <Text style={styles.emptySubtitle}>
+              {searchQuery} ile eşleşen adres bulunamadı.
+            </Text>
+          </View>
+        ) : filteredAddresses.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>
               <MapPin size={40} color={Colors.textLight} />
@@ -362,10 +450,12 @@ export default function AddressListScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-          sortedAddresses.map((address) => (
+          filteredAddresses.map((address) => (
             <ShippingLabel
               key={address.id}
               address={address}
+              isNew={!readIds.has(address.id)}
+              onMarkRead={markAddressRead}
               onPrint={() => handlePrint(address)}
               onShare={() => handleShare(address)}
               onDelete={() => handleDelete(address)}
@@ -375,6 +465,7 @@ export default function AddressListScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+      </View>
     </>
   );
 }
@@ -383,6 +474,38 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  stickyHeader: {
+    backgroundColor: Colors.white,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+    zIndex: 10,
+  },
+  scrollContent: {
+    flex: 1,
+  },
+  searchBarWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.background,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: Colors.text,
+    padding: 0,
   },
   topBar: {
     flexDirection: "row",
@@ -497,6 +620,26 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary + "10",
     alignItems: "center",
     justifyContent: "center",
+  },
+  labelIconWrapNew: {
+    backgroundColor: Colors.accent,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  newBadge: {
+    backgroundColor: Colors.accent,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  newBadgeText: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    color: Colors.white,
+    letterSpacing: 0.5,
   },
   labelHeaderInfo: {
     flex: 1,
