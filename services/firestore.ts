@@ -366,6 +366,27 @@ export async function getChatMessages(chatId: string): Promise<FirestoreMessage[
   }
 }
 
+export async function clearChatMessages(chatId: string): Promise<void> {
+  try {
+    const msgsRef = collection(db, "chats", chatId, "messages");
+    const snapshot = await getDocs(msgsRef);
+    const deletePromises = snapshot.docs.map((d) => deleteDoc(d.ref));
+    await Promise.all(deletePromises);
+
+    const chatRef = doc(db, "chats", chatId);
+    await setDoc(chatRef, {
+      lastMessage: "",
+      lastMessageTime: "",
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+
+    console.log("Chat messages cleared for:", chatId, "deleted:", snapshot.docs.length);
+  } catch (error) {
+    console.log("Error clearing chat messages:", error);
+    throw error;
+  }
+}
+
 export async function getUserChats(userId: string): Promise<FirestoreChat[]> {
   try {
     console.log("getUserChats called for userId:", userId);

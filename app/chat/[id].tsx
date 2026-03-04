@@ -10,10 +10,11 @@ import {
   Platform,
   Animated,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, Stack, useRouter } from "expo-router";
-import { Send, Check, CheckCheck, Paperclip, Smile, MapPin } from "lucide-react-native";
+import { Send, Check, CheckCheck, Paperclip, Smile, MapPin, MoreVertical, Trash2 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -24,6 +25,7 @@ import {
   getChatMessages,
   sendChatMessage,
   getOrCreateChat,
+  clearChatMessages,
   FirestoreMessage,
   BUTIKBIZ_ADMIN_ID,
   BUTIKBIZ_NAME,
@@ -153,6 +155,7 @@ export default function ChatDetailScreen() {
   const [localMessages, setLocalMessages] = useState<DisplayMessage[]>([]);
   const [productCard, setProductCard] = useState<ProductCard | null>(null);
   const [isChatReady, setIsChatReady] = useState<boolean>(false);
+  const [menuVisible, setMenuVisible] = useState<boolean>(false);
   const flatListRef = useRef<FlatList>(null);
   const sendScaleAnim = useRef(new Animated.Value(1)).current;
   const hasInjectedProduct = useRef(false);
@@ -229,6 +232,46 @@ export default function ChatDetailScreen() {
       }
     }
   }, [id, uid, storeId, storeName, storeAvatar, storeOwnerIdParam, profile, queryClient]);
+
+  const clearChatMutation = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error("Missing chat id");
+      return clearChatMessages(id);
+    },
+    onSuccess: () => {
+      setLocalMessages([]);
+      setProductCard(null);
+      prevMessageCountRef.current = 0;
+      queryClient.invalidateQueries({ queryKey: ["chatMessages", id] });
+      queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+      setMenuVisible(false);
+      console.log("Chat cleared successfully");
+    },
+    onError: (err) => {
+      console.log("Clear chat error:", err);
+    },
+  });
+
+  const { mutate: clearChat } = clearChatMutation;
+
+  const handleClearChat = useCallback(() => {
+    if (Platform.OS === "web") {
+      if (window.confirm("Sohbeti temizlemek istediğinize emin misiniz?")) {
+        clearChat();
+      } else {
+        setMenuVisible(false);
+      }
+    } else {
+      Alert.alert(
+        "Sohbeti Temizle",
+        "Tüm mesajlar silinecek. Emin misiniz?",
+        [
+          { text: "İptal", style: "cancel" as const, onPress: () => setMenuVisible(false) },
+          { text: "Temizle", style: "destructive" as const, onPress: () => clearChat() },
+        ]
+      );
+    }
+  }, [clearChat]);
 
   const { mutate: sendMessageMutate } = useMutation({
     mutationFn: async (text: string) => {
@@ -317,6 +360,18 @@ export default function ChatDetailScreen() {
     </TouchableOpacity>
   );
 
+  const headerRight = () => (
+    <View>
+      <TouchableOpacity
+        onPress={() => setMenuVisible((v) => !v)}
+        style={styles.menuButton}
+        testID="chat-menu-button"
+      >
+        <MoreVertical size={22} color={Colors.headerText} />
+      </TouchableOpacity>
+    </View>
+  );
+
   const renderMessage = ({ item }: { item: DisplayMessage }) => {
     if (item.isProductCard && productCard) {
       return <ProductMessageBubble product={productCard} timestamp={item.timestamp} />;
@@ -330,10 +385,30 @@ export default function ChatDetailScreen() {
         options={{
           headerShown: true,
           headerTitle: headerTitle,
+          headerRight: headerRight,
           headerStyle: { backgroundColor: Colors.primary },
           headerTintColor: Colors.headerText,
         }}
       />
+      {menuVisible && (
+        <>
+          <TouchableOpacity
+            style={styles.menuOverlay}
+            activeOpacity={1}
+            onPress={() => setMenuVisible(false)}
+          />
+          <View style={styles.dropdownMenu}>
+            <TouchableOpacity
+              style={styles.dropdownItem}
+              onPress={handleClearChat}
+              testID="clear-chat-button"
+            >
+              <Trash2 size={18} color={Colors.danger} />
+              <Text style={styles.dropdownItemText}>Sohbeti temizle</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -611,6 +686,44 @@ const styles = StyleSheet.create({
   adminInputDisabledText: {
     fontSize: 13,
     color: Colors.textLight,
+    fontWeight: "500" as const,
+  },
+  menuButton: {
+    padding: 6,
+  },
+  menuOverlay: {
+    position: "absolute" as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 99,
+  },
+  dropdownMenu: {
+    position: "absolute" as const,
+    top: 4,
+    right: 12,
+    backgroundColor: Colors.white,
+    borderRadius: 10,
+    paddingVertical: 4,
+    minWidth: 180,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    zIndex: 100,
+  },
+  dropdownItem: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  dropdownItemText: {
+    fontSize: 15,
+    color: Colors.danger,
     fontWeight: "500" as const,
   },
   productCardPrice: {
