@@ -36,6 +36,7 @@ import Colors from "@/constants/colors";
 import { useUser, AddressSubmission } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
 import { getAddressFormLink } from "@/utils/links";
+import { playAddressNotificationSound } from "@/services/notificationSound";
 
 const READ_ADDRESSES_KEY = "@read_address_ids";
 
@@ -258,6 +259,20 @@ export default function AddressListScreen() {
     storeAddresses.length > 0 ? storeAddresses : (profile.addressSubmissions ?? []),
     [storeAddresses, profile.addressSubmissions]
   );
+
+  const prevAddressCountRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (prevAddressCountRef.current === null) {
+      prevAddressCountRef.current = addresses.length;
+      return;
+    }
+    if (addresses.length > prevAddressCountRef.current) {
+      console.log("New address received, playing address notification sound");
+      playAddressNotificationSound();
+    }
+    prevAddressCountRef.current = addresses.length;
+  }, [addresses.length]);
 
   useEffect(() => {
     AsyncStorage.getItem(READ_ADDRESSES_KEY).then((stored) => {

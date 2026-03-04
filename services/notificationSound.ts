@@ -6,6 +6,9 @@ let isInitialized = false;
 const NOTIFICATION_SOUND_URL =
   "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
+const ADDRESS_SOUND_URL =
+  "https://assets.mixkit.co/active_storage/sfx/1518/1518-preview.mp3";
+
 async function initAudio(): Promise<void> {
   if (isInitialized) return;
   try {
@@ -54,9 +57,49 @@ export async function playNotificationSound(): Promise<void> {
   }
 }
 
+let addressSoundInstance: Audio.Sound | null = null;
+
+export async function playAddressNotificationSound(): Promise<void> {
+  try {
+    await initAudio();
+
+    if (addressSoundInstance) {
+      try {
+        await addressSoundInstance.unloadAsync();
+      } catch {
+        // ignore
+      }
+      addressSoundInstance = null;
+    }
+
+    const { sound } = await Audio.Sound.createAsync(
+      { uri: ADDRESS_SOUND_URL },
+      { shouldPlay: true, volume: 0.8 }
+    );
+    addressSoundInstance = sound;
+
+    sound.setOnPlaybackStatusUpdate((status) => {
+      if (status.isLoaded && status.didJustFinish) {
+        sound.unloadAsync().catch(() => {});
+        if (addressSoundInstance === sound) {
+          addressSoundInstance = null;
+        }
+      }
+    });
+
+    console.log("Address notification sound played");
+  } catch (error) {
+    console.log("Error playing address notification sound:", error);
+  }
+}
+
 export function cleanupSound(): void {
   if (soundInstance) {
     soundInstance.unloadAsync().catch(() => {});
     soundInstance = null;
+  }
+  if (addressSoundInstance) {
+    addressSoundInstance.unloadAsync().catch(() => {});
+    addressSoundInstance = null;
   }
 }
