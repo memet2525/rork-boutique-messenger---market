@@ -70,7 +70,7 @@ function ChatItem({ chat, onPress, onLongPress, currentUid }: { chat: FirestoreC
       >
         <View style={styles.avatarWrapper}>
           <Image source={{ uri: displayAvatar }} style={styles.avatar} />
-          {chat.isOnline && <View style={styles.onlineDot} />}
+          <View style={[styles.statusDot, chat.isOnline ? styles.statusDotOnline : styles.statusDotOffline]} />
         </View>
 
         <View style={styles.chatContent}>
@@ -645,16 +645,21 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     backgroundColor: Colors.border,
   },
-  onlineDot: {
+  statusDot: {
     position: "absolute",
     bottom: 1,
     right: 1,
     width: 13,
     height: 13,
     borderRadius: 7,
-    backgroundColor: Colors.online,
     borderWidth: 2,
     borderColor: Colors.white,
+  },
+  statusDotOnline: {
+    backgroundColor: Colors.online,
+  },
+  statusDotOffline: {
+    backgroundColor: "#B0B0B0",
   },
   chatContent: {
     flex: 1,
