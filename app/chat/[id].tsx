@@ -152,6 +152,7 @@ export default function ChatDetailScreen() {
   const [messageText, setMessageText] = useState<string>("");
   const [localMessages, setLocalMessages] = useState<DisplayMessage[]>([]);
   const [productCard, setProductCard] = useState<ProductCard | null>(null);
+  const [isChatReady, setIsChatReady] = useState<boolean>(false);
   const flatListRef = useRef<FlatList>(null);
   const sendScaleAnim = useRef(new Animated.Value(1)).current;
   const hasInjectedProduct = useRef(false);
@@ -220,10 +221,15 @@ export default function ChatDetailScreen() {
         customerAvatar: profile.avatar,
       }).then(() => {
         console.log("Chat created/initialized:", id, "participants:", [uid, resolvedOwnerId]);
-        queryClient.invalidateQueries({ queryKey: ["userChats"] });
+        setIsChatReady(true);
+        queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
       }).catch((err) => {
         console.log("Chat init error:", err);
+        setIsChatReady(true);
       });
+    } else if (id && uid && !storeId) {
+      console.log("Chat opened without storeId, marking ready:", id);
+      setIsChatReady(true);
     }
   }, [id, uid, storeId, storeName, storeAvatar, storeOwnerIdParam, profile, queryClient]);
 
@@ -234,25 +240,26 @@ export default function ChatDetailScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["chatMessages", id] });
-      queryClient.invalidateQueries({ queryKey: ["userChats"] });
+      queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
     },
   });
 
   useEffect(() => {
-    if (productMessage && productName && productPrice && !hasInjectedProduct.current && uid && id) {
+    if (productMessage && productName && productPrice && !hasInjectedProduct.current && uid && id && isChatReady) {
       hasInjectedProduct.current = true;
 
       if (productImage && productName && productPrice) {
         setProductCard({ image: productImage, name: productName, price: productPrice });
       }
 
+      console.log("Sending product message after chat ready:", id);
       sendMessageMutate(productMessage);
 
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 300);
     }
-  }, [productMessage, productImage, productName, productPrice, uid, id, sendMessageMutate]);
+  }, [productMessage, productImage, productName, productPrice, uid, id, isChatReady, sendMessageMutate]);
 
   const handleSend = useCallback(() => {
     if (!messageText.trim()) return;

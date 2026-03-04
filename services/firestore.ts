@@ -305,12 +305,12 @@ export async function sendChatMessage(chatId: string, message: {
     await setDoc(msgRef, msgData);
 
     const chatRef = doc(db, "chats", chatId);
-    await updateDoc(chatRef, {
+    await setDoc(chatRef, {
       lastMessage: message.text,
       lastMessageTime: timeStr,
       lastMessageTimestamp: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
+    }, { merge: true });
 
     try {
       const chatSnap = await getDoc(chatRef);
