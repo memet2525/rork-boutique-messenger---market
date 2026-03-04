@@ -347,32 +347,7 @@ export default function ChatsScreen() {
 
   return (
     <View style={styles.container}>
-      {isLoggedIn && (
-        <TouchableOpacity
-          style={styles.newChatButton}
-          onPress={handleStartChat}
-          testID="new-chat-button"
-          activeOpacity={0.7}
-        >
-          <MessageSquarePlus size={18} color={Colors.white} />
-          <Text style={styles.newChatButtonText}>Sohbet Başlat</Text>
-        </TouchableOpacity>
-      )}
 
-      {isLoggedIn && isStoreOwner && (
-        <TouchableOpacity
-          style={styles.testChatButton}
-          onPress={() => testChatMutation.mutate()}
-          disabled={testChatMutation.isPending}
-          testID="test-chat-button"
-          activeOpacity={0.7}
-        >
-          <FlaskConical size={16} color="#6366F1" />
-          <Text style={styles.testChatButtonText}>
-            {testChatMutation.isPending ? "Oluşturuluyor..." : "Test Sohbeti Başlat"}
-          </Text>
-        </TouchableOpacity>
-      )}
 
       {isStoreOwner && (
         <View style={styles.aiToggleSection}>
