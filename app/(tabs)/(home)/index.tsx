@@ -12,18 +12,20 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import { Search, Star, MapPin, LogIn, X, SlidersHorizontal, Download } from "lucide-react-native";
+import { Search, Star, MapPin, LogIn, X, SlidersHorizontal, Download, MessageCircle } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
+import * as Haptics from "expo-haptics";
 
 import Colors from "@/constants/colors";
 import { stores, Store, Product } from "@/mocks/stores";
 import { useUser } from "@/contexts/UserContext";
-import { getFirestoreStores } from "@/services/firestore";
+import { useAlert } from "@/contexts/AlertContext";
+import { getFirestoreStores, getChatId, getOrCreateChat } from "@/services/firestore";
 
 const CATEGORIES = ["Tümü", "Moda", "Teknoloji", "Gıda", "Dekorasyon", "Spor", "Butik", "Diğer"];
 
-function StoreCard({ store, onPress }: { store: Store; onPress: () => void }) {
+function StoreCard({ store, onPress, onChatPress }: { store: Store; onPress: () => void; onChatPress: () => void }) {
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
   const handlePressIn = useCallback(() => {
@@ -91,9 +93,15 @@ function StoreCard({ store, onPress }: { store: Store; onPress: () => void }) {
         </View>
 
         <View style={styles.cardFooter}>
-          <TouchableOpacity style={styles.messageButton} onPress={onPress}>
-            <Text style={styles.messageButtonText}>Mağazaya Git</Text>
-          </TouchableOpacity>
+          <View style={styles.cardFooterRow}>
+            <TouchableOpacity style={styles.chatButton} onPress={onChatPress} activeOpacity={0.7}>
+              <MessageCircle size={16} color={Colors.primary} />
+              <Text style={styles.chatButtonText}>Sohbet</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.messageButton} onPress={onPress}>
+              <Text style={styles.messageButtonText}>Mağazaya Git</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Pressable>
     </Animated.View>
@@ -112,6 +120,7 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
 export default function MarketplaceScreen() {
   const router = useRouter();
   const { profile, isLoggedIn, uid } = useUser();
+  const { showAlert } = useAlert();
   const [installPrompt, setInstallPrompt] = useState<any>(deferredPrompt);
   const [isStandalone, setIsStandalone] = useState<boolean>(false);
 
@@ -221,9 +230,58 @@ export default function MarketplaceScreen() {
     router.push(`/store/${storeId}` as any);
   }, [router]);
 
+  const handleChatPress = useCallback((store: Store) => {
+    if (!isLoggedIn) {
+      showAlert(
+        "Üye Olun",
+        "Satıcıya mesaj gönderebilmek için üye olmanız gerekmektedir.",
+        [
+          { text: "Vazgeç", style: "cancel" },
+          { text: "Giriş Yap / Üye Ol", onPress: () => router.push("/login" as any) },
+        ]
+      );
+      return;
+    }
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    const firestoreData = firestoreStoresQuery.data ?? [];
+    const fsStore = firestoreData.find((fs: any) => fs.id === store.id);
+    const storeOwnerId = (fsStore as any)?.ownerId || store.id;
+    const chatId = getChatId(uid ?? "anon", storeOwnerId);
+
+    getOrCreateChat({
+      chatId,
+      userId: uid!,
+      storeId: store.id,
+      storeName: store.name,
+      storeAvatar: store.avatar,
+      storeOwnerId,
+      customerName: profile.name || profile.firstName || "Müşteri",
+      customerAvatar: profile.avatar,
+    }).then(() => {
+      console.log("Chat created from home, navigating to:", chatId);
+      router.push({
+        pathname: "/chat/[id]" as any,
+        params: {
+          id: chatId,
+          storeId: store.id,
+          storeName: store.name,
+          storeAvatar: store.avatar,
+          storeOwnerId,
+          isOnline: store.isOnline ? "true" : "false",
+        },
+      });
+    }).catch((err) => {
+      console.log("Chat creation error:", err);
+      showAlert("Hata", "Sohbet başlatılırken bir hata oluştu.");
+    });
+  }, [isLoggedIn, uid, profile, router, showAlert, firestoreStoresQuery.data]);
+
   const renderStore = useCallback(({ item }: { item: Store }) => (
-    <StoreCard store={item} onPress={() => handleStorePress(item.id)} />
-  ), [handleStorePress]);
+    <StoreCard store={item} onPress={() => handleStorePress(item.id)} onChatPress={() => handleChatPress(item)} />
+  ), [handleStorePress, handleChatPress]);
 
   const [searchFocused, setSearchFocused] = useState<boolean>(false);
   const searchInputRef = useRef<TextInput>(null);
@@ -595,11 +653,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingBottom: 14,
   },
+  cardFooterRow: {
+    flexDirection: "row" as const,
+    gap: 8,
+  },
+  chatButton: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+  },
+  chatButtonText: {
+    color: Colors.primary,
+    fontSize: 14,
+    fontWeight: "700" as const,
+  },
   messageButton: {
+    flex: 1,
     backgroundColor: Colors.primary,
     borderRadius: 12,
     paddingVertical: 11,
-    alignItems: "center",
+    alignItems: "center" as const,
   },
   messageButtonText: {
     color: Colors.white,
