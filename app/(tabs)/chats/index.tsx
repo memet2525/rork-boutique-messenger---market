@@ -73,17 +73,24 @@ function ChatItem({ chat, onPress, currentUid }: { chat: FirestoreChat; onPress:
 
         <View style={styles.chatContent}>
           <View style={styles.chatTopRow}>
-            <Text style={styles.chatName} numberOfLines={1}>{displayName}</Text>
-            <Text style={styles.chatTime}>
+            <Text style={[styles.chatName, (chat.unreadCount ?? 0) > 0 && styles.chatNameUnread]} numberOfLines={1}>{displayName}</Text>
+            <Text style={[styles.chatTime, (chat.unreadCount ?? 0) > 0 && styles.chatTimeUnread]}>
               {chat.lastMessageTime || ""}
             </Text>
           </View>
           <View style={styles.chatBottomRow}>
             <View style={styles.lastMessageRow}>
-              <Text style={styles.lastMessage} numberOfLines={1}>
+              <Text style={[styles.lastMessage, (chat.unreadCount ?? 0) > 0 && styles.lastMessageUnread]} numberOfLines={1}>
                 {chat.lastMessage || "Henüz mesaj yok"}
               </Text>
             </View>
+            {(chat.unreadCount ?? 0) > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>
+                  {(chat.unreadCount ?? 0) > 99 ? "99+" : chat.unreadCount}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
       </Pressable>
@@ -607,6 +614,34 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginTop: 3,
+    gap: 8,
+  },
+  chatNameUnread: {
+    fontWeight: "700" as const,
+    color: "#1A1A1A",
+  },
+  chatTimeUnread: {
+    color: Colors.accent,
+    fontWeight: "600" as const,
+  },
+  lastMessageUnread: {
+    color: Colors.text,
+    fontWeight: "500" as const,
+  },
+  unreadBadge: {
+    backgroundColor: Colors.accent,
+    borderRadius: 12,
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  unreadBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700" as const,
+    textAlign: "center" as const,
   },
   lastMessageRow: {
     flexDirection: "row",

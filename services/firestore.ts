@@ -207,6 +207,7 @@ export interface FirestoreChat {
   isOnline: boolean;
   createdAt: any;
   updatedAt: any;
+  unreadCount?: number;
 }
 
 export function getChatId(userId: string, storeId: string): string {
@@ -444,6 +445,23 @@ export async function getUserChats(userId: string): Promise<FirestoreChat[]> {
       console.log("Chat found:", d.id, "participants:", data.participants, "storeName:", data.storeName);
       return { id: d.id, ...data } as FirestoreChat;
     });
+
+    const unreadPromises = chatsList.map(async (chat) => {
+      try {
+        const msgsRef = collection(db, "chats", chat.id, "messages");
+        const msgsSnapshot = await getDocs(msgsRef);
+        const unreadCount = msgsSnapshot.docs.filter((d) => {
+          const data = d.data();
+          return data.senderId !== userId && !data.isRead;
+        }).length;
+        chat.unreadCount = unreadCount;
+      } catch (err) {
+        console.log("Error counting unread for chat:", chat.id, err);
+        chat.unreadCount = 0;
+      }
+    });
+    await Promise.all(unreadPromises);
+
     chatsList.sort((a, b) => {
       const timeA = a.updatedAt?.seconds ?? 0;
       const timeB = b.updatedAt?.seconds ?? 0;
