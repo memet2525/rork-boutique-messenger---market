@@ -18,13 +18,13 @@ import {
   Heart,
   MapPin,
 } from "lucide-react-native";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { stores, Store, Product } from "@/mocks/stores";
 import { useUser } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
-import { getFirestoreStore, getFirestoreStoreBySlug, getChatId } from "@/services/firestore";
+import { getFirestoreStore, getFirestoreStoreBySlug, getChatId, getOrCreateChat } from "@/services/firestore";
 
 function ProductCard({ product, storeId, onPress }: { product: Product; storeId: string; onPress: () => void }) {
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
@@ -57,6 +57,7 @@ function ProductCard({ product, storeId, onPress }: { product: Product; storeId:
 export default function StoreDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { profile, isLoggedIn, uid } = useUser();
   const { showAlert } = useAlert();
 
@@ -91,6 +92,43 @@ export default function StoreDetailScreen() {
     if (firestoreData && firestoreData.ownerId) return firestoreData.ownerId as string;
     return resolvedStoreId;
   }, [id, uid, firestoreData, resolvedStoreId]);
+
+  const startStoreChatMutation = useMutation({
+    mutationFn: async () => {
+      if (!uid || !store) throw new Error("No uid or store");
+      const chatId = getChatId(uid, storeOwnerId ?? "unknown");
+      console.log("Creating chat from store - storeOwnerId:", storeOwnerId, "storeId:", resolvedStoreId, "chatId:", chatId);
+      await getOrCreateChat({
+        chatId,
+        userId: uid,
+        storeId: resolvedStoreId ?? "",
+        storeName: store.name,
+        storeAvatar: store.avatar,
+        storeOwnerId: storeOwnerId ?? "unknown",
+        customerName: profile.name || profile.firstName || "Müşteri",
+        customerAvatar: profile.avatar,
+      });
+      return chatId;
+    },
+    onSuccess: (chatId) => {
+      queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+      router.push({
+        pathname: "/chat/[id]" as RelativePathString,
+        params: {
+          id: chatId,
+          storeId: resolvedStoreId ?? "",
+          storeName: store!.name,
+          storeAvatar: store!.avatar,
+          storeOwnerId: storeOwnerId ?? "",
+          isOnline: store!.isOnline ? "true" : "false",
+        },
+      });
+    },
+    onError: (err) => {
+      console.log("Chat creation error from store:", err);
+      showAlert("Hata", "Sohbet başlatılırken bir hata oluştu. Lütfen tekrar deneyin.");
+    },
+  });
 
   const handleProductPress = React.useCallback((productId: string) => {
     router.push({ pathname: "/product/[id]" as RelativePathString, params: { id: productId, storeId: resolvedStoreId ?? "", storeOwnerId: storeOwnerId ?? "" } });
@@ -212,20 +250,9 @@ export default function StoreDetailScreen() {
                   );
                   return;
                 }
-                const chatId = getChatId(uid ?? 'anon', storeOwnerId ?? 'unknown');
-                console.log("Starting chat from store - storeOwnerId:", storeOwnerId, "storeId:", resolvedStoreId, "chatId:", chatId);
-                router.push({
-                  pathname: "/chat/[id]" as RelativePathString,
-                  params: {
-                    id: chatId,
-                    storeId: resolvedStoreId ?? "",
-                    storeName: store.name,
-                    storeAvatar: store.avatar,
-                    storeOwnerId: storeOwnerId ?? "",
-                    isOnline: store.isOnline ? "true" : "false",
-                  },
-                });
+                startStoreChatMutation.mutate();
               }}
+              disabled={startStoreChatMutation.isPending}
               testID="message-store"
             >
               <MessageCircle size={18} color={Colors.white} />

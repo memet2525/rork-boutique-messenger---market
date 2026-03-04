@@ -199,37 +199,34 @@ export default function ChatDetailScreen() {
   }, [messagesQuery.data, uid]);
 
   useEffect(() => {
-    if (
-      id &&
-      uid &&
-      storeId &&
-      !chatInitialized.current
-    ) {
+    if (id && uid && !chatInitialized.current) {
       chatInitialized.current = true;
-      const storeData = stores.find((s) => s.id === storeId);
-      const resolvedOwnerId = storeOwnerIdParam || storeId || "unknown";
-      console.log("Chat init with storeOwnerId:", resolvedOwnerId, "storeId:", storeId, "uid:", uid);
+      if (storeId) {
+        const storeData = stores.find((s) => s.id === storeId);
+        const resolvedOwnerId = storeOwnerIdParam || storeId || "unknown";
+        console.log("Chat init with storeOwnerId:", resolvedOwnerId, "storeId:", storeId, "uid:", uid);
 
-      getOrCreateChat({
-        chatId: id,
-        userId: uid,
-        storeId: storeId,
-        storeName: storeName || "Mağaza",
-        storeAvatar: storeAvatar ?? storeData?.avatar ?? "",
-        storeOwnerId: resolvedOwnerId,
-        customerName: profile.name || profile.firstName || "Müşteri",
-        customerAvatar: profile.avatar,
-      }).then(() => {
-        console.log("Chat created/initialized:", id, "participants:", [uid, resolvedOwnerId]);
+        getOrCreateChat({
+          chatId: id,
+          userId: uid,
+          storeId: storeId,
+          storeName: storeName || "Mağaza",
+          storeAvatar: storeAvatar ?? storeData?.avatar ?? "",
+          storeOwnerId: resolvedOwnerId,
+          customerName: profile.name || profile.firstName || "Müşteri",
+          customerAvatar: profile.avatar,
+        }).then(() => {
+          console.log("Chat created/initialized:", id, "participants:", [uid, resolvedOwnerId]);
+          setIsChatReady(true);
+          queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+        }).catch((err) => {
+          console.log("Chat init error:", err);
+          setIsChatReady(true);
+        });
+      } else {
+        console.log("Chat opened without storeId, marking ready:", id);
         setIsChatReady(true);
-        queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
-      }).catch((err) => {
-        console.log("Chat init error:", err);
-        setIsChatReady(true);
-      });
-    } else if (id && uid && !storeId) {
-      console.log("Chat opened without storeId, marking ready:", id);
-      setIsChatReady(true);
+      }
     }
   }, [id, uid, storeId, storeName, storeAvatar, storeOwnerIdParam, profile, queryClient]);
 

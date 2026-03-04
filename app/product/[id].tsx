@@ -25,18 +25,19 @@ import {
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { stores } from "@/mocks/stores";
 import { useUser } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
 import { getProductLink } from "@/utils/links";
-import { getChatId, getFirestoreStore } from "@/services/firestore";
+import { getChatId, getFirestoreStore, getOrCreateChat } from "@/services/firestore";
 
 export default function ProductDetailScreen() {
   const { id, storeId, storeOwnerId: storeOwnerIdParam } = useLocalSearchParams<{ id: string; storeId: string; storeOwnerId?: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { profile, isLoggedIn, uid } = useUser();
   const { showAlert } = useAlert();
   const [isFavorite, setIsFavorite] = useState<boolean>(false);
@@ -194,6 +195,49 @@ export default function ProductDetailScreen() {
     return targetStoreId;
   }, [storeOwnerIdParam, storeData, storeId, firestoreStoreQuery.data]);
 
+  const startChatMutation = useMutation({
+    mutationFn: async () => {
+      if (!uid) throw new Error("No uid");
+      const targetStoreId = storeData?.id ?? storeId ?? "unknown";
+      const chatId = getChatId(uid, resolvedStoreOwnerId);
+      console.log("Creating chat from product - storeOwnerId:", resolvedStoreOwnerId, "storeId:", targetStoreId, "chatId:", chatId);
+      await getOrCreateChat({
+        chatId,
+        userId: uid,
+        storeId: targetStoreId,
+        storeName: storeData?.name ?? "Mağaza",
+        storeAvatar: storeData?.avatar ?? "",
+        storeOwnerId: resolvedStoreOwnerId,
+        customerName: profile.name || profile.firstName || "Müşteri",
+        customerAvatar: profile.avatar,
+      });
+      return { chatId, targetStoreId };
+    },
+    onSuccess: ({ chatId, targetStoreId }) => {
+      queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+      const productInfo = `🛍️ ${productData?.name}\n💰 ${productData?.price}\n\nBu ürün hakkında bilgi almak istiyorum.`;
+      router.push({
+        pathname: "/chat/[id]" as RelativePathString,
+        params: {
+          id: chatId,
+          storeId: targetStoreId,
+          storeName: storeData?.name ?? "",
+          storeAvatar: storeData?.avatar ?? "",
+          storeOwnerId: resolvedStoreOwnerId,
+          isOnline: storeData?.isOnline ? "true" : "false",
+          productMessage: productInfo,
+          productImage: productData?.image ?? "",
+          productName: productData?.name ?? "",
+          productPrice: productData?.price ?? "",
+        },
+      });
+    },
+    onError: (err) => {
+      console.log("Chat creation error from product:", err);
+      showAlert("Hata", "Sohbet başlatılırken bir hata oluştu. Lütfen tekrar deneyin.");
+    },
+  });
+
   const handleMessageStore = useCallback(() => {
     if (!isLoggedIn) {
       showAlert(
@@ -206,26 +250,11 @@ export default function ProductDetailScreen() {
       );
       return;
     }
-    const targetStoreId = storeData?.id ?? storeId ?? "unknown";
-    const chatId = getChatId(uid ?? "anon", resolvedStoreOwnerId);
-    const productInfo = `🛍️ ${productData?.name}\n💰 ${productData?.price}\n\nBu ürün hakkında bilgi almak istiyorum.`;
-    console.log("Starting chat from product - storeOwnerId:", resolvedStoreOwnerId, "storeId:", targetStoreId, "chatId:", chatId);
-    router.push({
-      pathname: "/chat/[id]" as RelativePathString,
-      params: {
-        id: chatId,
-        storeId: targetStoreId,
-        storeName: storeData?.name ?? "",
-        storeAvatar: storeData?.avatar ?? "",
-        storeOwnerId: resolvedStoreOwnerId,
-        isOnline: storeData?.isOnline ? "true" : "false",
-        productMessage: productInfo,
-        productImage: productData?.image ?? "",
-        productName: productData?.name ?? "",
-        productPrice: productData?.price ?? "",
-      },
-    });
-  }, [router, productData, storeData, storeId, uid, isLoggedIn, showAlert, resolvedStoreOwnerId]);
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    startChatMutation.mutate();
+  }, [isLoggedIn, showAlert, router, startChatMutation.mutate]);
 
   if (!productData) {
     return (

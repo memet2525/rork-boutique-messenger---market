@@ -260,6 +260,7 @@ export default function ChatsScreen() {
         storeId: chat.storeId,
         storeName: isOwner ? chat.customerName : chat.storeName,
         storeAvatar: isOwner ? chat.customerAvatar : chat.storeAvatar,
+        storeOwnerId: chat.storeOwnerId ?? "",
         isOnline: chat.isOnline ? "true" : "false",
       },
     });
