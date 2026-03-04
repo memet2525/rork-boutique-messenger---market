@@ -496,7 +496,13 @@ export async function saveAddressToStoreOwner(
     console.log("saveAddressToStoreOwner called with storeOwnerId:", storeOwnerId, "addressId:", address.id);
     const addressRef = doc(db, "stores", storeOwnerId, "addresses", address.id);
     const savedAt = new Date().toISOString();
-    await setDoc(addressRef, { ...address, savedAt });
+    const cleanAddress: Record<string, any> = { ...address, savedAt };
+    Object.keys(cleanAddress).forEach((key) => {
+      if (cleanAddress[key] === undefined) {
+        delete cleanAddress[key];
+      }
+    });
+    await setDoc(addressRef, cleanAddress);
     console.log("Address saved to store subcollection:", storeOwnerId, "address:", address.id);
     return true;
   } catch (error: any) {
