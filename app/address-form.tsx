@@ -10,8 +10,9 @@ import {
   KeyboardAvoidingView,
   ActivityIndicator,
 } from "react-native";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Send, Package, MapPin } from "lucide-react-native";
+import { Stack, useLocalSearchParams, useRouter, RelativePathString } from "expo-router";
+import { Send, Package, MapPin, ChevronRight } from "lucide-react-native";
+import { Linking } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useMutation } from "@tanstack/react-query";
 
@@ -115,6 +116,15 @@ export default function AddressFormScreen() {
             headerStyle: { backgroundColor: Colors.primary },
             headerTintColor: Colors.headerText,
             headerTitleStyle: { fontWeight: "700" as const },
+            headerRight: () => (
+              <TouchableOpacity
+                onPress={() => Linking.openURL("https://butikbiz.com")}
+                activeOpacity={0.6}
+                style={styles.headerBrandBtn}
+              >
+                <Text style={styles.headerBrandText}>butikbiz.com</Text>
+              </TouchableOpacity>
+            ),
           }}
         />
         <View style={styles.successContainer}>
@@ -147,6 +157,15 @@ export default function AddressFormScreen() {
           headerStyle: { backgroundColor: Colors.primary },
           headerTintColor: Colors.headerText,
           headerTitleStyle: { fontWeight: "700" as const },
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => Linking.openURL("https://butikbiz.com")}
+              activeOpacity={0.6}
+              style={styles.headerBrandBtn}
+            >
+              <Text style={styles.headerBrandText}>butikbiz.com</Text>
+            </TouchableOpacity>
+          ),
         }}
       />
       <KeyboardAvoidingView
@@ -159,12 +178,22 @@ export default function AddressFormScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          <View style={styles.headerChip}>
+          <TouchableOpacity
+            style={styles.headerChip}
+            activeOpacity={storeName && storeId ? 0.6 : 1}
+            onPress={() => {
+              if (storeId) {
+                router.push(`/store/${storeId}` as RelativePathString);
+              }
+            }}
+            disabled={!storeId}
+          >
             <MapPin size={16} color={Colors.primary} />
-            <Text style={styles.headerChipText}>
+            <Text style={[styles.headerChipText, storeId ? styles.headerChipTextClickable : undefined]} numberOfLines={1}>
               {storeName ? `${storeName} için teslimat bilgileri` : "Teslimat Bilgileri"}
             </Text>
-          </View>
+            {storeId ? <ChevronRight size={14} color={Colors.primary} /> : null}
+          </TouchableOpacity>
 
           {productInfo ? (
             <View style={styles.productChip}>
@@ -301,6 +330,19 @@ const styles = StyleSheet.create({
     fontWeight: "600" as const,
     color: Colors.primary,
     flex: 1,
+  },
+  headerChipTextClickable: {
+    textDecorationLine: "underline" as const,
+  },
+  headerBrandBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  headerBrandText: {
+    fontSize: 11,
+    color: Colors.headerText,
+    opacity: 0.45,
+    fontWeight: "500" as const,
   },
   productChip: {
     flexDirection: "row",
