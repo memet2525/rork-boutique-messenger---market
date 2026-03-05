@@ -192,7 +192,7 @@ export default function MyStoreScreen() {
             style={styles.shareCard}
             onPress={async () => {
               const link = getAddressFormLink(profile.storeName || "");
-              await Share.share({ message: `Adres formumu doldurun: ${link}`, url: link });
+              await Share.share({ message: `Adres formumu doldurun: ${link}` });
             }}
             testID="share-address-form"
           >
@@ -206,7 +206,7 @@ export default function MyStoreScreen() {
             style={styles.shareCard}
             onPress={async () => {
               const link = getStoreLink(profile.storeName || "");
-              await Share.share({ message: `Mağazamı ziyaret edin: ${link}`, url: link });
+              await Share.share({ message: `Mağazamı ziyaret edin: ${link}` });
             }}
             testID="share-store-link"
           >
