@@ -19,10 +19,14 @@ import {
   Settings,
   BarChart3,
   ClipboardList,
+  Share2,
+  Link,
 } from "lucide-react-native";
+import { Share } from "react-native";
 
 import Colors from "@/constants/colors";
 import { useUser } from "@/contexts/UserContext";
+import { getAddressFormLink, getStoreLink } from "@/utils/links";
 
 function ProductCard({ product, onPress }: { product: { id: string; name: string; price: string; image: string }; onPress: () => void }) {
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
@@ -180,6 +184,36 @@ export default function MyStoreScreen() {
               <Settings size={20} color="#8B5CF6" />
             </View>
             <Text style={styles.actionLabel}>Ayarlar</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.shareActions}>
+          <TouchableOpacity
+            style={styles.shareCard}
+            onPress={async () => {
+              const link = getAddressFormLink(profile.storeName || "");
+              await Share.share({ message: `Adres formumu doldurun: ${link}`, url: link });
+            }}
+            testID="share-address-form"
+          >
+            <View style={[styles.shareIconBg, { backgroundColor: "rgba(16, 185, 129, 0.1)" }]}>
+              <Share2 size={18} color="#10B981" />
+            </View>
+            <Text style={styles.shareLabel}>Adres Formunu Paylaş</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.shareCard}
+            onPress={async () => {
+              const link = getStoreLink(profile.storeName || "");
+              await Share.share({ message: `Mağazamı ziyaret edin: ${link}`, url: link });
+            }}
+            testID="share-store-link"
+          >
+            <View style={[styles.shareIconBg, { backgroundColor: "rgba(99, 102, 241, 0.1)" }]}>
+              <Link size={18} color="#6366F1" />
+            </View>
+            <Text style={styles.shareLabel}>Mağaza Linkini Paylaş</Text>
           </TouchableOpacity>
         </View>
 
@@ -404,6 +438,39 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 10,
     fontWeight: "700" as const,
+  },
+  shareActions: {
+    flexDirection: "row" as const,
+    paddingHorizontal: 16,
+    gap: 10,
+    marginBottom: 12,
+  },
+  shareCard: {
+    flex: 1,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    padding: 12,
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  shareIconBg: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  shareLabel: {
+    fontSize: 12,
+    fontWeight: "600" as const,
+    color: Colors.text,
+    flex: 1,
   },
   statsRow: {
     flexDirection: "row",
