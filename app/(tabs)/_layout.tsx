@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from "expo-router";
-import { Store, MessageCircle, User, Home } from "lucide-react-native";
+import { MessageCircle, User, Home, ShoppingBag } from "lucide-react-native";
 import React, { useCallback } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
@@ -10,7 +10,7 @@ import { useAlert } from "@/contexts/AlertContext";
 import { getUnreadMessageCount } from "@/services/firestore";
 
 export default function TabLayout() {
-  const { isLoggedIn, uid } = useUser();
+  const { isLoggedIn, uid, profile } = useUser();
   const router = useRouter();
   const { showAlert } = useAlert();
 
@@ -100,6 +100,30 @@ export default function TabLayout() {
           tabPress: handleAuthTab,
         }}
       />
+      {profile.isStore && (
+        <Tabs.Screen
+          name="my-store"
+          options={{
+            title: "Mağazam",
+            tabBarIcon: ({ color, focused }) => (
+              <View style={focused ? tabStyles.activeIconBg : undefined}>
+                <ShoppingBag color={color} size={22} strokeWidth={focused ? 2.5 : 1.8} />
+              </View>
+            ),
+          }}
+          listeners={{
+            tabPress: handleAuthTab,
+          }}
+        />
+      )}
+      {!profile.isStore && (
+        <Tabs.Screen
+          name="my-store"
+          options={{
+            href: null,
+          }}
+        />
+      )}
       <Tabs.Screen
         name="profile"
         options={{
