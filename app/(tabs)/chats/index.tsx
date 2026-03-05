@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  RefreshControl,
 } from "react-native";
 import { Image } from "expo-image";
 import { useRouter, RelativePathString, useFocusEffect } from "expo-router";
@@ -478,6 +479,16 @@ export default function ChatsScreen() {
           ItemSeparatorComponent={renderSeparator}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={chatsQuery.isRefetching}
+              onRefresh={() => {
+                queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+              }}
+              tintColor={Colors.primary}
+              colors={[Colors.primary]}
+            />
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <MessageSquarePlus size={56} color={Colors.textLight} />

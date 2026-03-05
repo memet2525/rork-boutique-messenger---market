@@ -9,13 +9,14 @@ import {
   Animated,
   Pressable,
   Platform,
+  RefreshControl,
 } from "react-native";
 import { Image } from "expo-image";
 import { useRouter, RelativePathString } from "expo-router";
 import { Search, Star, MapPin, LogIn, X, Download, MessageCircle } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { stores, Store, Product } from "@/mocks/stores";
@@ -271,6 +272,8 @@ export default function MarketplaceScreen() {
     />
   ), [handleStorePress, handleMessagePress, handleProductPress]);
 
+  const queryClient = useQueryClient();
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [searchFocused, setSearchFocused] = useState<boolean>(false);
   const searchInputRef = useRef<TextInput>(null);
 
@@ -371,6 +374,17 @@ export default function MarketplaceScreen() {
         renderItem={renderStore}
         contentContainerStyle={styles.storesList}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              queryClient.invalidateQueries({ queryKey: ["firestoreStores"] }).then(() => setRefreshing(false)).catch(() => setRefreshing(false));
+            }}
+            tintColor={Colors.primary}
+            colors={[Colors.primary]}
+          />
+        }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <MapPin size={48} color={Colors.textLight} />
