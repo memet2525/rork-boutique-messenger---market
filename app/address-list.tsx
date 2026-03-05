@@ -10,6 +10,7 @@ import {
   Animated,
   Pressable,
   TextInput,
+  Linking,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import {
@@ -184,10 +185,17 @@ function ShippingLabel({ address, onPrint, onShare, onDelete, isNew, onMarkRead 
                 <User size={14} color={Colors.textSecondary} />
                 <Text style={styles.labelRowText}>{address.customerName}</Text>
               </View>
-              <View style={styles.labelRow}>
-                <Phone size={14} color={Colors.textSecondary} />
-                <Text style={styles.labelRowText}>{address.customerPhone}</Text>
-              </View>
+              <TouchableOpacity
+                style={styles.labelRow}
+                onPress={() => {
+                  const phone = address.customerPhone.replace(/\s/g, "");
+                  Linking.openURL(`tel:${phone}`);
+                }}
+                activeOpacity={0.6}
+              >
+                <Phone size={14} color={Colors.primary} />
+                <Text style={[styles.labelRowText, styles.phoneText]}>{address.customerPhone}</Text>
+              </TouchableOpacity>
             </View>
 
             <View style={styles.labelSection}>
@@ -712,6 +720,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
+  },
+  phoneText: {
+    color: Colors.primary,
+    textDecorationLine: "underline",
   },
   labelNoteText: {
     fontSize: 13,
