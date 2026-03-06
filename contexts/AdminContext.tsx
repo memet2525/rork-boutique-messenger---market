@@ -2,14 +2,17 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import createContextHook from "@nkzw/create-context-hook";
 import {
-  getAdminData,
-  saveAdminData,
   getAdminSettings,
   saveAdminSettings,
   getAllUsers,
   getStoreOwners,
+  getFirestoreStores,
   sendSystemNotification,
   sendAdminChatToMultipleUsers,
+  updateUserStatus,
+  updateStoreStatusAdmin,
+  updateStorePlanAdmin,
+  verifyStorePaymentAdmin,
 } from "@/services/firestore";
 
 export type PlanType = "monthly" | "yearly";
@@ -29,6 +32,7 @@ export interface StoreMember {
   planEndDate: string;
   createdAt: string;
   paymentVerified: boolean;
+  email: string;
 }
 
 export interface CustomerMember {
@@ -40,6 +44,8 @@ export interface CustomerMember {
   orderCount: number;
   totalSpent: string;
   createdAt: string;
+  email: string;
+  isStore: boolean;
 }
 
 export interface AdminSettings {
@@ -109,174 +115,52 @@ Platform, satici bilgilerini ucuncu taraflarla paylasmaz.
 
 Bu sozlesmeyi okuyup kabul ettiginizi onaylayin.`;
 
-const MOCK_STORES: StoreMember[] = [
-  {
-    id: "sm_1",
-    name: "Bella Moda",
-    ownerName: "Ayse Yildiz",
-    phone: "0532 111 22 33",
-    avatar: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=200&h=200&fit=crop",
-    category: "Moda",
-    city: "Istanbul",
-    status: "active",
-    planType: "monthly",
-    planStartDate: "2026-01-15",
-    planEndDate: "2026-02-15",
-    createdAt: "2025-06-10",
-    paymentVerified: true,
-  },
-  {
-    id: "sm_2",
-    name: "Tech Corner",
-    ownerName: "Burak Kaya",
-    phone: "0544 222 33 44",
-    avatar: "https://images.unsplash.com/photo-1531297484001-80022131f5a1?w=200&h=200&fit=crop",
-    category: "Teknoloji",
-    city: "Ankara",
-    status: "active",
-    planType: "yearly",
-    planStartDate: "2025-08-01",
-    planEndDate: "2026-08-01",
-    createdAt: "2025-05-20",
-    paymentVerified: true,
-  },
-  {
-    id: "sm_3",
-    name: "Dogal Lezzetler",
-    ownerName: "Fatma Demir",
-    phone: "0505 333 44 55",
-    avatar: "https://images.unsplash.com/photo-1488459716781-31db52582fe9?w=200&h=200&fit=crop",
-    category: "Gida",
-    city: "Izmir",
-    status: "passive",
-    planType: "monthly",
-    planStartDate: "2025-12-01",
-    planEndDate: "2026-01-01",
-    createdAt: "2025-09-15",
-    paymentVerified: false,
-  },
-  {
-    id: "sm_4",
-    name: "Ev & Dekor",
-    ownerName: "Cemre Arslan",
-    phone: "0553 444 55 66",
-    avatar: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=200&h=200&fit=crop",
-    category: "Dekorasyon",
-    city: "Bursa",
-    status: "active",
-    planType: "yearly",
-    planStartDate: "2025-10-01",
-    planEndDate: "2026-10-01",
-    createdAt: "2025-04-01",
-    paymentVerified: true,
-  },
-  {
-    id: "sm_5",
-    name: "Spor Dunyasi",
-    ownerName: "Deniz Ozturk",
-    phone: "0542 555 66 77",
-    avatar: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=200&h=200&fit=crop",
-    category: "Spor",
-    city: "Antalya",
-    status: "passive",
-    planType: "monthly",
-    planStartDate: "2025-11-10",
-    planEndDate: "2025-12-10",
-    createdAt: "2025-07-22",
-    paymentVerified: false,
-  },
-];
+function formatDate(dateStr: string | undefined): string {
+  if (!dateStr) return "-";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "-";
+    return d.toLocaleDateString("tr-TR", { year: "numeric", month: "2-digit", day: "2-digit" });
+  } catch {
+    return "-";
+  }
+}
 
-const MOCK_CUSTOMERS: CustomerMember[] = [
-  {
-    id: "cm_1",
-    name: "Elif Kaya",
-    phone: "0532 456 78 90",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop",
-    status: "active",
-    orderCount: 8,
-    totalSpent: "2.340 TL",
-    createdAt: "2025-03-15",
-  },
-  {
-    id: "cm_2",
-    name: "Mehmet Demir",
-    phone: "0544 321 65 87",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop",
-    status: "active",
-    orderCount: 15,
-    totalSpent: "5.120 TL",
-    createdAt: "2025-01-20",
-  },
-  {
-    id: "cm_3",
-    name: "Zeynep Arslan",
-    phone: "0505 789 01 23",
-    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop",
-    status: "active",
-    orderCount: 3,
-    totalSpent: "890 TL",
-    createdAt: "2025-08-10",
-  },
-  {
-    id: "cm_4",
-    name: "Ali Ozkan",
-    phone: "0553 654 32 10",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop",
-    status: "passive",
-    orderCount: 1,
-    totalSpent: "149 TL",
-    createdAt: "2025-11-05",
-  },
-  {
-    id: "cm_5",
-    name: "Selin Yilmaz",
-    phone: "0542 987 65 43",
-    avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop",
-    status: "active",
-    orderCount: 22,
-    totalSpent: "8.750 TL",
-    createdAt: "2024-12-01",
-  },
-  {
-    id: "cm_6",
-    name: "Can Turkoglu",
-    phone: "0535 123 45 67",
-    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop",
-    status: "passive",
-    orderCount: 0,
-    totalSpent: "0 TL",
-    createdAt: "2026-01-18",
-  },
-];
-
-interface AdminData {
-  stores: StoreMember[];
-  customers: CustomerMember[];
+function getFirestoreDate(data: Record<string, any>, field: string): string {
+  const val = data[field];
+  if (!val) return "";
+  if (typeof val === "string") return val;
+  if (val?.seconds) return new Date(val.seconds * 1000).toISOString();
+  if (val?.toDate) return val.toDate().toISOString();
+  return "";
 }
 
 export const [AdminProvider, useAdmin] = createContextHook(() => {
   const queryClient = useQueryClient();
-  const [stores, setStores] = useState<StoreMember[]>(MOCK_STORES);
-  const [customers, setCustomers] = useState<CustomerMember[]>(MOCK_CUSTOMERS);
+  const [stores, setStores] = useState<StoreMember[]>([]);
+  const [customers, setCustomers] = useState<CustomerMember[]>([]);
   const [settings, setSettings] = useState<AdminSettings>({ aiApiKey: "", aiProvider: "openai", sellerAgreement: DEFAULT_SELLER_AGREEMENT, userAgreement: DEFAULT_USER_AGREEMENT });
 
-  const adminQuery = useQuery({
-    queryKey: ["adminData"],
+  const realUsersQuery = useQuery({
+    queryKey: ["adminAllUsers"],
     queryFn: async () => {
-      console.log("Loading admin data from Firestore...");
-      const data = await getAdminData();
-      if (data && Array.isArray(data.stores) && data.stores.length > 0) {
-        return {
-          stores: data.stores as StoreMember[],
-          customers: Array.isArray(data.customers) ? data.customers as CustomerMember[] : MOCK_CUSTOMERS,
-        };
-      }
-      const initial: AdminData = { stores: MOCK_STORES, customers: MOCK_CUSTOMERS };
-      await saveAdminData(initial);
-      console.log("Admin data seeded to Firestore");
-      return initial;
+      console.log("Admin: Loading all users from Firestore...");
+      const allUsers = await getAllUsers();
+      console.log("Admin: Loaded", allUsers.length, "users from Firestore");
+      return allUsers;
     },
+    refetchInterval: 30000,
+  });
+
+  const realStoresQuery = useQuery({
+    queryKey: ["adminAllStores"],
+    queryFn: async () => {
+      console.log("Admin: Loading all stores from Firestore...");
+      const allStores = await getFirestoreStores();
+      console.log("Admin: Loaded", allStores.length, "stores from Firestore");
+      return allStores;
+    },
+    refetchInterval: 30000,
   });
 
   const settingsQuery = useQuery({
@@ -295,32 +179,114 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     },
   });
 
-  const saveMutation = useMutation({
-    mutationFn: async (data: AdminData) => {
-      await saveAdminData(data);
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adminData"] });
-    },
-  });
-
   const saveSettingsMutation = useMutation({
     mutationFn: async (data: AdminSettings) => {
       await saveAdminSettings(data);
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["adminSettings"] });
+      void queryClient.invalidateQueries({ queryKey: ["adminSettings"] });
     },
   });
 
   useEffect(() => {
-    if (adminQuery.data) {
-      setStores(adminQuery.data.stores);
-      setCustomers(adminQuery.data.customers);
+    if (realUsersQuery.data && realStoresQuery.data) {
+      const allUsers = realUsersQuery.data;
+      const allStores = realStoresQuery.data;
+
+      const storeMap = new Map<string, Record<string, any>>();
+      for (const store of allStores) {
+        const ownerId = store.ownerId || store.id;
+        storeMap.set(ownerId, store);
+      }
+
+      const storeMembers: StoreMember[] = [];
+      const customerMembers: CustomerMember[] = [];
+
+      for (const user of allUsers) {
+        const userId = user.uid || user.id;
+        const userName = user.name || `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Isimsiz";
+        const userPhone = user.phone || user.storePhone || "-";
+        const userAvatar = user.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop";
+        const userEmail = user.email || "";
+        const createdAtRaw = getFirestoreDate(user, "createdAt") || getFirestoreDate(user, "updatedAt") || "";
+        const accountStatus = user.accountStatus || "active";
+
+        if (user.isStore) {
+          const storeData = storeMap.get(userId);
+          const storeName = user.storeName || storeData?.name || userName;
+          const storeCategory = user.storeCategory || storeData?.category || "Diger";
+          const storeCity = user.storeCity || storeData?.city || "-";
+          const storeStatus = storeData?.adminStatus || accountStatus;
+
+          const planType = (user.subscriptionPlan === "yearly" ? "yearly" : "monthly") as PlanType;
+          const planStartDate = user.subscriptionStartDate || storeData?.planStartDate || "";
+          const planEndDate = user.subscriptionEndDate || storeData?.planEndDate || "";
+          const paymentVerified = storeData?.paymentVerified ?? (user.subscriptionStatus === "active");
+
+          storeMembers.push({
+            id: userId,
+            name: storeName,
+            ownerName: userName,
+            phone: userPhone,
+            avatar: storeData?.avatar || userAvatar,
+            category: storeCategory,
+            city: storeCity,
+            status: storeStatus === "passive" ? "passive" : "active",
+            planType,
+            planStartDate: formatDate(planStartDate),
+            planEndDate: formatDate(planEndDate),
+            createdAt: formatDate(createdAtRaw),
+            paymentVerified,
+            email: userEmail,
+          });
+        } else {
+          customerMembers.push({
+            id: userId,
+            name: userName,
+            phone: userPhone,
+            avatar: userAvatar,
+            status: accountStatus === "passive" ? "passive" : "active",
+            orderCount: user.orderCount || 0,
+            totalSpent: user.totalSpent || "0 TL",
+            createdAt: formatDate(createdAtRaw),
+            email: userEmail,
+            isStore: false,
+          });
+        }
+      }
+
+      for (const store of allStores) {
+        const ownerId = store.ownerId || store.id;
+        const alreadyAdded = storeMembers.some((s) => s.id === ownerId);
+        if (!alreadyAdded) {
+          const storeStatus = store.adminStatus || "active";
+          const planType = (store.subscriptionPlan === "yearly" ? "yearly" : "monthly") as PlanType;
+
+          storeMembers.push({
+            id: ownerId,
+            name: store.name || "Isimsiz Magaza",
+            ownerName: store.ownerName || store.name || "-",
+            phone: store.phone || "-",
+            avatar: store.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop",
+            category: store.category || "Diger",
+            city: store.city || "-",
+            status: storeStatus === "passive" ? "passive" : "active",
+            planType,
+            planStartDate: formatDate(store.planStartDate),
+            planEndDate: formatDate(store.planEndDate),
+            createdAt: formatDate(getFirestoreDate(store, "createdAt")),
+            paymentVerified: store.paymentVerified ?? false,
+            email: store.email || "",
+          });
+        }
+      }
+
+      console.log("Admin: Mapped", storeMembers.length, "stores,", customerMembers.length, "customers");
+      setStores(storeMembers);
+      setCustomers(customerMembers);
     }
-  }, [adminQuery.data]);
+  }, [realUsersQuery.data, realStoresQuery.data]);
 
   useEffect(() => {
     if (settingsQuery.data) {
@@ -329,20 +295,28 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
   }, [settingsQuery.data]);
 
   const toggleStoreStatus = useCallback(
-    (storeId: string) => {
+    async (storeId: string) => {
+      const store = stores.find((s) => s.id === storeId);
+      if (!store) return;
+      const newStatus: MemberStatus = store.status === "active" ? "passive" : "active";
       const updated = stores.map((s) =>
-        s.id === storeId
-          ? { ...s, status: (s.status === "active" ? "passive" : "active") as MemberStatus }
-          : s
+        s.id === storeId ? { ...s, status: newStatus } : s
       );
       setStores(updated);
-      saveMutation.mutate({ stores: updated, customers });
+      try {
+        await updateUserStatus(storeId, newStatus);
+        void updateStoreStatusAdmin(storeId, newStatus);
+        console.log("Store status toggled:", storeId, "->", newStatus);
+      } catch (error) {
+        console.log("Error toggling store status:", error);
+        setStores(stores);
+      }
     },
-    [stores, customers, saveMutation]
+    [stores]
   );
 
   const updateStorePlan = useCallback(
-    (storeId: string, planType: PlanType) => {
+    async (storeId: string, planType: PlanType) => {
       const now = new Date();
       const endDate = new Date(now);
       if (planType === "monthly") {
@@ -350,46 +324,76 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       } else {
         endDate.setFullYear(endDate.getFullYear() + 1);
       }
+      const startStr = now.toISOString().split("T")[0];
+      const endStr = endDate.toISOString().split("T")[0];
+
       const updated = stores.map((s) =>
         s.id === storeId
           ? {
               ...s,
               planType,
               status: "active" as MemberStatus,
-              planStartDate: now.toISOString().split("T")[0],
-              planEndDate: endDate.toISOString().split("T")[0],
+              planStartDate: formatDate(startStr),
+              planEndDate: formatDate(endStr),
               paymentVerified: false,
             }
           : s
       );
       setStores(updated);
-      saveMutation.mutate({ stores: updated, customers });
+      try {
+        await updateStorePlanAdmin(storeId, {
+          planType,
+          planStartDate: startStr,
+          planEndDate: endStr,
+          paymentVerified: false,
+          subscriptionPlan: planType,
+          subscriptionStatus: "active",
+        });
+        await updateStoreStatusAdmin(storeId, "active");
+        console.log("Store plan updated:", storeId, planType);
+      } catch (error) {
+        console.log("Error updating store plan:", error);
+        setStores(stores);
+      }
     },
-    [stores, customers, saveMutation]
+    [stores]
   );
 
   const verifyPayment = useCallback(
-    (storeId: string) => {
+    async (storeId: string) => {
       const updated = stores.map((s) =>
         s.id === storeId ? { ...s, paymentVerified: true } : s
       );
       setStores(updated);
-      saveMutation.mutate({ stores: updated, customers });
+      try {
+        await verifyStorePaymentAdmin(storeId);
+        console.log("Payment verified:", storeId);
+      } catch (error) {
+        console.log("Error verifying payment:", error);
+        setStores(stores);
+      }
     },
-    [stores, customers, saveMutation]
+    [stores]
   );
 
   const toggleCustomerStatus = useCallback(
-    (customerId: string) => {
+    async (customerId: string) => {
+      const customer = customers.find((c) => c.id === customerId);
+      if (!customer) return;
+      const newStatus: MemberStatus = customer.status === "active" ? "passive" : "active";
       const updated = customers.map((c) =>
-        c.id === customerId
-          ? { ...c, status: (c.status === "active" ? "passive" : "active") as MemberStatus }
-          : c
+        c.id === customerId ? { ...c, status: newStatus } : c
       );
       setCustomers(updated);
-      saveMutation.mutate({ stores, customers: updated });
+      try {
+        await updateUserStatus(customerId, newStatus);
+        console.log("Customer status toggled:", customerId, "->", newStatus);
+      } catch (error) {
+        console.log("Error toggling customer status:", error);
+        setCustomers(customers);
+      }
     },
-    [stores, customers, saveMutation]
+    [customers]
   );
 
   const updateSettings = useCallback(
@@ -401,11 +405,17 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     [settings, saveSettingsMutation]
   );
 
+  const refreshData = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["adminAllUsers"] });
+    void queryClient.invalidateQueries({ queryKey: ["adminAllStores"] });
+    console.log("Admin: Data refresh triggered");
+  }, [queryClient]);
+
   const sendMessageToAll = useCallback(
     async (title: string, message: string) => {
       try {
         const users = await getAllUsers();
-        const chatText = `📢 ${title}\n\n${message}`;
+        const chatText = `\u{1F4E2} ${title}\n\n${message}`;
         const uids = users.map((u) => u.uid);
         await sendAdminChatToMultipleUsers(uids, chatText);
         const notification = {
@@ -432,7 +442,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     async (title: string, message: string) => {
       try {
         const owners = await getStoreOwners();
-        const chatText = `🏪 ${title}\n\n${message}`;
+        const chatText = `\u{1F3EA} ${title}\n\n${message}`;
         const uids = owners.map((o) => o.uid);
         await sendAdminChatToMultipleUsers(uids, chatText);
         const notification = {
@@ -460,7 +470,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       try {
         const allUsers = await getAllUsers();
         const nonStoreUsers = allUsers.filter((u) => !u.isStore);
-        const chatText = `👋 ${title}\n\n${message}`;
+        const chatText = `\u{1F44B} ${title}\n\n${message}`;
         const uids = nonStoreUsers.map((u) => u.uid);
         await sendAdminChatToMultipleUsers(uids, chatText);
         const notification = {
@@ -486,8 +496,9 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
   const activeStoreCount = useMemo(() => stores.filter((s) => s.status === "active").length, [stores]);
   const activeCustomerCount = useMemo(() => customers.filter((c) => c.status === "active").length, [customers]);
   const unpaidStores = useMemo(() => stores.filter((s) => !s.paymentVerified && s.status === "active"), [stores]);
+  const totalUserCount = useMemo(() => stores.length + customers.length, [stores, customers]);
 
-  return {
+  return useMemo(() => ({
     stores,
     customers,
     settings,
@@ -496,12 +507,20 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     verifyPayment,
     toggleCustomerStatus,
     updateSettings,
+    refreshData,
     sendMessageToAll,
     sendMessageToStoreOwners,
     sendMessageToCustomers,
     activeStoreCount,
     activeCustomerCount,
     unpaidStores,
-    isLoading: adminQuery.isLoading,
-  };
+    totalUserCount,
+    isLoading: realUsersQuery.isLoading || realStoresQuery.isLoading,
+  }), [
+    stores, customers, settings, toggleStoreStatus, updateStorePlan,
+    verifyPayment, toggleCustomerStatus, updateSettings, refreshData,
+    sendMessageToAll, sendMessageToStoreOwners, sendMessageToCustomers,
+    activeStoreCount, activeCustomerCount, unpaidStores, totalUserCount,
+    realUsersQuery.isLoading, realStoresQuery.isLoading,
+  ]);
 });

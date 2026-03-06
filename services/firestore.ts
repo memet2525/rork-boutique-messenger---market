@@ -774,6 +774,63 @@ export async function getTypingStatus(chatId: string, currentUserId: string): Pr
   }
 }
 
+export async function updateUserStatus(uid: string, status: "active" | "passive"): Promise<void> {
+  try {
+    await updateDoc(doc(db, "users", uid), { accountStatus: status });
+    console.log("User status updated:", uid, status);
+  } catch (error) {
+    console.log("Error updating user status:", error);
+    throw error;
+  }
+}
+
+export async function updateStoreStatusAdmin(storeId: string, status: "active" | "passive"): Promise<void> {
+  try {
+    await updateDoc(doc(db, "stores", storeId), { adminStatus: status });
+    console.log("Store admin status updated:", storeId, status);
+  } catch (error) {
+    console.log("Error updating store admin status:", error);
+    throw error;
+  }
+}
+
+export async function updateStorePlanAdmin(storeId: string, planData: {
+  planType: string;
+  planStartDate: string;
+  planEndDate: string;
+  paymentVerified: boolean;
+  subscriptionPlan: string;
+  subscriptionStatus: string;
+}): Promise<void> {
+  try {
+    await updateDoc(doc(db, "stores", storeId), planData);
+    const userRef = doc(db, "users", storeId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      await updateDoc(userRef, {
+        subscriptionPlan: planData.subscriptionPlan,
+        subscriptionStatus: planData.subscriptionStatus,
+        subscriptionStartDate: planData.planStartDate,
+        subscriptionEndDate: planData.planEndDate,
+      });
+    }
+    console.log("Store plan updated:", storeId, planData);
+  } catch (error) {
+    console.log("Error updating store plan:", error);
+    throw error;
+  }
+}
+
+export async function verifyStorePaymentAdmin(storeId: string): Promise<void> {
+  try {
+    await updateDoc(doc(db, "stores", storeId), { paymentVerified: true });
+    console.log("Store payment verified:", storeId);
+  } catch (error) {
+    console.log("Error verifying store payment:", error);
+    throw error;
+  }
+}
+
 export async function sendAdminChatToMultipleUsers(
   targetUids: string[],
   messageText: string

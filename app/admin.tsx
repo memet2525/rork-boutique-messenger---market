@@ -8,15 +8,14 @@ import {
   Platform,
   Animated,
   TextInput,
-  Modal,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { Image } from "expo-image";
 import { Stack } from "expo-router";
 import {
   Store,
   Users,
-  Crown,
   Calendar,
   CalendarDays,
   ToggleLeft,
@@ -29,21 +28,21 @@ import {
   Settings,
   Key,
   MessageCircle,
-  X,
   CheckCircle,
   AlertTriangle,
   MapPin,
-  DollarSign,
   FileText,
   RotateCcw,
+  Mail,
+  UserCheck,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 
 import Colors from "@/constants/colors";
 import { useAdmin, StoreMember, CustomerMember, PlanType, DEFAULT_SELLER_AGREEMENT, DEFAULT_USER_AGREEMENT } from "@/contexts/AdminContext";
-import { useAlert } from "@/contexts/AlertContext";
 
 type TabType = "stores" | "customers" | "settings" | "messages";
+import { useAlert } from "@/contexts/AlertContext";
 
 function StoreCard({
   store,
@@ -71,7 +70,7 @@ function StoreCard({
   const handleToggle = useCallback(() => {
     handlePress();
     if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     showAlert(
       isActive ? "Magazayi Pasif Yap" : "Magazayi Aktif Yap",
@@ -86,7 +85,7 @@ function StoreCard({
   const handlePlanChange = useCallback(
     (plan: PlanType) => {
       if (Platform.OS !== "web") {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
       const planLabel = plan === "monthly" ? "Aylik (199 TL)" : "Yillik (1.999 TL)";
       showAlert(
@@ -128,12 +127,18 @@ function StoreCard({
           <Phone size={14} color={Colors.textSecondary} />
           <Text style={styles.detailText}>{store.phone}</Text>
         </View>
-        {store.city && (
+        {store.email ? (
+          <View style={styles.detailRow}>
+            <Mail size={14} color={Colors.textSecondary} />
+            <Text style={styles.detailText}>{store.email}</Text>
+          </View>
+        ) : null}
+        {store.city && store.city !== "-" ? (
           <View style={styles.detailRow}>
             <MapPin size={14} color={Colors.textSecondary} />
             <Text style={styles.detailText}>{store.city}</Text>
           </View>
-        )}
+        ) : null}
         <View style={styles.detailRow}>
           <Clock size={14} color={Colors.textSecondary} />
           <Text style={styles.detailText}>Kayit: {store.createdAt}</Text>
@@ -239,7 +244,7 @@ function CustomerCard({
 
   const handleToggle = useCallback(() => {
     if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     showAlert(
       isActive ? "Musteriyi Pasif Yap" : "Musteriyi Aktif Yap",
@@ -274,6 +279,12 @@ function CustomerCard({
           <Phone size={14} color={Colors.textSecondary} />
           <Text style={styles.detailText}>{customer.phone}</Text>
         </View>
+        {customer.email ? (
+          <View style={styles.detailRow}>
+            <Mail size={14} color={Colors.textSecondary} />
+            <Text style={styles.detailText}>{customer.email}</Text>
+          </View>
+        ) : null}
         <View style={styles.detailRow}>
           <ShoppingBag size={14} color={Colors.textSecondary} />
           <Text style={styles.detailText}>{customer.orderCount} siparis</Text>
@@ -328,7 +339,7 @@ function SettingsTab() {
     }
     updateSettings({ sellerAgreement: agreementText.trim() });
     if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     showAlert("Kaydedildi", "Satici sozlesmesi basariyla guncellendi.");
     setShowAgreementEditor(false);
@@ -356,7 +367,7 @@ function SettingsTab() {
     }
     updateSettings({ userAgreement: userAgreementText.trim() });
     if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     showAlert("Kaydedildi", "Uye sozlesmesi basariyla guncellendi.");
     setShowUserAgreementEditor(false);
@@ -598,7 +609,7 @@ function MessagesTab() {
       showAlert("Basarili", `Mesaj ${targetLabel} gonderildi.`);
       setTitle("");
       setMessage("");
-    } catch (error) {
+    } catch {
       showAlert("Hata", "Mesaj gonderilirken bir hata olustu.");
     } finally {
       setSending(false);
@@ -695,14 +706,24 @@ export default function AdminScreen() {
     toggleCustomerStatus,
     activeStoreCount,
     activeCustomerCount,
-    unpaidStores,
+    unpaidStores: _unpaidStores,
+    totalUserCount,
+    refreshData,
+    isLoading,
   } = useAdmin();
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    refreshData();
+    setTimeout(() => setRefreshing(false), 1500);
+  }, [refreshData]);
 
   const switchTab = useCallback(
     (tab: TabType) => {
       setActiveTab(tab);
       if (Platform.OS !== "web") {
-        Haptics.selectionAsync();
+        void Haptics.selectionAsync();
       }
     },
     []
@@ -721,6 +742,13 @@ export default function AdminScreen() {
 
       <View style={styles.statsHeader}>
         <View style={styles.statCard}>
+          <View style={[styles.statIconWrap, { backgroundColor: "#8B5CF620" }]}>
+            <UserCheck size={20} color="#8B5CF6" />
+          </View>
+          <Text style={styles.statNumber}>{totalUserCount}</Text>
+          <Text style={styles.statSubtext}>Toplam Uye</Text>
+        </View>
+        <View style={styles.statCard}>
           <View style={[styles.statIconWrap, { backgroundColor: "#F59E0B20" }]}>
             <Store size={20} color="#F59E0B" />
           </View>
@@ -735,16 +763,6 @@ export default function AdminScreen() {
           <Text style={styles.statNumber}>{customers.length}</Text>
           <Text style={styles.statSubtext}>Musteri</Text>
           <Text style={styles.statActiveText}>{activeCustomerCount} aktif</Text>
-        </View>
-        <View style={styles.statCard}>
-          <View style={[styles.statIconWrap, { backgroundColor: unpaidStores.length > 0 ? "#EF444420" : "#22C55E20" }]}>
-            <DollarSign size={20} color={unpaidStores.length > 0 ? "#EF4444" : "#22C55E"} />
-          </View>
-          <Text style={styles.statNumber}>{unpaidStores.length}</Text>
-          <Text style={styles.statSubtext}>Odenmemis</Text>
-          <Text style={[styles.statActiveText, unpaidStores.length > 0 && { color: "#EF4444" }]}>
-            {unpaidStores.length > 0 ? "uyari" : "temiz"}
-          </Text>
         </View>
       </View>
 
@@ -797,12 +815,26 @@ export default function AdminScreen() {
         <SettingsTab />
       ) : activeTab === "messages" ? (
         <MessagesTab />
+      ) : isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Kullanicilar yukleniyor...</Text>
+        </View>
       ) : (
         <ScrollView
           style={styles.listContainer}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
+          }
         >
+          {activeTab === "stores" && stores.length === 0 && (
+            <View style={styles.emptyState}>
+              <Store size={48} color="#CBD5E1" />
+              <Text style={styles.emptyStateText}>Henuz magaza bulunmuyor</Text>
+            </View>
+          )}
           {activeTab === "stores" &&
             stores.map((store) => (
               <StoreCard
@@ -813,6 +845,12 @@ export default function AdminScreen() {
                 onVerifyPayment={() => verifyPayment(store.id)}
               />
             ))}
+          {activeTab === "customers" && customers.length === 0 && (
+            <View style={styles.emptyState}>
+              <Users size={48} color="#CBD5E1" />
+              <Text style={styles.emptyStateText}>Henuz musteri bulunmuyor</Text>
+            </View>
+          )}
           {activeTab === "customers" &&
             customers.map((customer) => (
               <CustomerCard
@@ -1285,5 +1323,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600" as const,
     color: "#64748B",
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: "#64748B",
+    marginTop: 12,
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+    gap: 12,
+  },
+  emptyStateText: {
+    fontSize: 15,
+    color: "#94A3B8",
+    fontWeight: "500" as const,
   },
 });
