@@ -418,16 +418,17 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
         const chatText = `\u{1F4E2} ${title}\n\n${message}`;
         const uids = users.map((u) => u.uid);
         await sendAdminChatToMultipleUsers(uids, chatText);
-        const notification = {
-          id: `notif_${Date.now()}`,
-          title,
-          message,
-          type: "admin_message",
-          createdAt: new Date().toISOString(),
-          read: false,
-        };
-        for (const user of users) {
-          await sendSystemNotification(user.uid, notification);
+        const baseTime = Date.now();
+        for (let i = 0; i < users.length; i++) {
+          const notification = {
+            id: `notif_${baseTime}_${i}_${Math.random().toString(36).substr(2, 6)}`,
+            title,
+            message,
+            type: "admin_message",
+            createdAt: new Date().toISOString(),
+            read: false,
+          };
+          await sendSystemNotification(users[i].uid, notification);
         }
         console.log("Message sent to all users:", users.length);
       } catch (error) {
@@ -445,16 +446,17 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
         const chatText = `\u{1F3EA} ${title}\n\n${message}`;
         const uids = owners.map((o) => o.uid);
         await sendAdminChatToMultipleUsers(uids, chatText);
-        const notification = {
-          id: `notif_${Date.now()}`,
-          title,
-          message,
-          type: "admin_store_message",
-          createdAt: new Date().toISOString(),
-          read: false,
-        };
-        for (const owner of owners) {
-          await sendSystemNotification(owner.uid, notification);
+        const baseTime = Date.now();
+        for (let i = 0; i < owners.length; i++) {
+          const notification = {
+            id: `notif_${baseTime}_${i}_${Math.random().toString(36).substr(2, 6)}`,
+            title,
+            message,
+            type: "admin_store_message",
+            createdAt: new Date().toISOString(),
+            read: false,
+          };
+          await sendSystemNotification(owners[i].uid, notification);
         }
         console.log("Message sent to store owners:", owners.length);
       } catch (error) {
@@ -473,16 +475,17 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
         const chatText = `\u{1F44B} ${title}\n\n${message}`;
         const uids = nonStoreUsers.map((u) => u.uid);
         await sendAdminChatToMultipleUsers(uids, chatText);
-        const notification = {
-          id: `notif_${Date.now()}`,
-          title,
-          message,
-          type: "admin_customer_message",
-          createdAt: new Date().toISOString(),
-          read: false,
-        };
-        for (const user of nonStoreUsers) {
-          await sendSystemNotification(user.uid, notification);
+        const baseTime = Date.now();
+        for (let i = 0; i < nonStoreUsers.length; i++) {
+          const notification = {
+            id: `notif_${baseTime}_${i}_${Math.random().toString(36).substr(2, 6)}`,
+            title,
+            message,
+            type: "admin_customer_message",
+            createdAt: new Date().toISOString(),
+            read: false,
+          };
+          await sendSystemNotification(nonStoreUsers[i].uid, notification);
         }
         console.log("Message sent to customers:", nonStoreUsers.length);
       } catch (error) {

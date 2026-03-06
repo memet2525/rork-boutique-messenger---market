@@ -158,14 +158,25 @@ export async function sendSystemNotification(
   }
 ): Promise<void> {
   try {
-    const userDoc = await getDoc(doc(db, "users", targetUid));
-    const existing = userDoc.exists() ? userDoc.data() : {};
-    const notifications = Array.isArray(existing.systemNotifications) ? existing.systemNotifications : [];
-    notifications.unshift(notification);
-    await updateDoc(doc(db, "users", targetUid), { systemNotifications: notifications });
-    console.log("System notification sent to:", targetUid);
-  } catch (error) {
-    console.log("Error sending system notification:", error);
+    const userRef = doc(db, "users", targetUid);
+    try {
+      const userSnap = await getDoc(userRef);
+      if (!userSnap.exists()) {
+        console.log("sendSystemNotification: user doc does not exist, creating:", targetUid);
+        await setDoc(userRef, { systemNotifications: [notification] }, { merge: true });
+      } else {
+        await updateDoc(userRef, {
+          systemNotifications: arrayUnion(notification),
+        });
+      }
+      console.log("System notification sent to:", targetUid);
+    } catch (writeErr: any) {
+      console.log("sendSystemNotification write failed, trying setDoc merge:", writeErr?.code, writeErr?.message);
+      await setDoc(userRef, { systemNotifications: arrayUnion(notification) }, { merge: true });
+      console.log("System notification sent via setDoc merge to:", targetUid);
+    }
+  } catch (error: any) {
+    console.log("Error sending system notification to:", targetUid, error?.code, error?.message);
   }
 }
 
@@ -610,10 +621,30 @@ export async function getOrCreateAdminChat(targetUid: string): Promise<string> {
   try {
     const chatId = `admin_${targetUid}`;
     const chatRef = doc(db, "chats", chatId);
-    const chatSnap = await getDoc(chatRef);
-    if (chatSnap.exists()) {
+    let chatSnap: any = null;
+    try {
+      chatSnap = await getDoc(chatRef);
+    } catch (readErr: any) {
+      console.log("Admin chat read failed (may not exist yet):", readErr?.code, readErr?.message);
+      chatSnap = null;
+    }
+    if (chatSnap && chatSnap.exists()) {
       return chatId;
     }
+
+    let customerName = "";
+    let customerAvatar = "";
+    try {
+      const userSnap = await getDoc(doc(db, "users", targetUid));
+      if (userSnap.exists()) {
+        const userData = userSnap.data();
+        customerName = userData.name || `${userData.firstName || ""} ${userData.lastName || ""}`.trim() || "Kullanici";
+        customerAvatar = userData.avatar || "";
+      }
+    } catch (userErr) {
+      console.log("Could not fetch user data for admin chat:", userErr);
+    }
+
     const newChat: Omit<FirestoreChat, "id"> = {
       participants: [targetUid, BUTIKBIZ_ADMIN_ID],
       storeId: BUTIKBIZ_ADMIN_ID,
@@ -621,8 +652,8 @@ export async function getOrCreateAdminChat(targetUid: string): Promise<string> {
       storeAvatar: BUTIKBIZ_AVATAR,
       storeOwnerId: BUTIKBIZ_ADMIN_ID,
       customerId: targetUid,
-      customerName: "",
-      customerAvatar: "",
+      customerName,
+      customerAvatar,
       lastMessage: "",
       lastMessageTime: "",
       lastMessageTimestamp: serverTimestamp(),
@@ -631,7 +662,7 @@ export async function getOrCreateAdminChat(targetUid: string): Promise<string> {
       updatedAt: serverTimestamp(),
     };
     await setDoc(chatRef, newChat);
-    console.log("Admin chat created for user:", targetUid);
+    console.log("Admin chat created for user:", targetUid, "customerName:", customerName);
     return chatId;
   } catch (error) {
     console.log("Error creating admin chat:", error);

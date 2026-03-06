@@ -176,6 +176,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
       return DEFAULT_PROFILE;
     },
     enabled: !!uid,
+    refetchInterval: 30000,
   });
 
   const storeAddressesQuery = useQuery({
@@ -192,7 +193,8 @@ export const [UserProvider, useUser] = createContextHook(() => {
   const saveMutation = useMutation({
     mutationFn: async (updated: UserProfile) => {
       if (!uid) return updated;
-      await saveUserProfile(uid, updated);
+      const { systemNotifications: _sn, ...profileWithoutNotifications } = updated;
+      await saveUserProfile(uid, profileWithoutNotifications);
       if (updated.isStore && updated.storeName) {
         const storeSlug = slugify(updated.storeName);
         await saveStore(uid, {
@@ -225,7 +227,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
       return updated;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["firestoreStores"] });
+      void queryClient.invalidateQueries({ queryKey: ["firestoreStores"] });
     },
   });
 
@@ -356,7 +358,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
       if (uid) {
         const success = await deleteStoreAddress(uid, addressId);
         if (success) {
-          queryClient.invalidateQueries({ queryKey: ["storeAddresses", uid] });
+          void queryClient.invalidateQueries({ queryKey: ["storeAddresses", uid] });
         }
       }
       const updated = profile.addressSubmissions.filter((a) => a.id !== addressId);
@@ -367,7 +369,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
 
   const refreshAddresses = useCallback(() => {
     if (uid) {
-      queryClient.invalidateQueries({ queryKey: ["storeAddresses", uid] });
+      void queryClient.invalidateQueries({ queryKey: ["storeAddresses", uid] });
     }
   }, [uid, queryClient]);
 
@@ -458,18 +460,35 @@ export const [UserProvider, useUser] = createContextHook(() => {
   }, [queryClient]);
 
   const markNotificationRead = useCallback(
-    (notificationId: string) => {
-      const updated = profile.systemNotifications.map((n) =>
-        n.id === notificationId ? { ...n, read: true } : n
-      );
-      updateProfile({ systemNotifications: updated });
+    async (notificationId: string) => {
+      setProfile((prev) => ({
+        ...prev,
+        systemNotifications: prev.systemNotifications.map((n) =>
+          n.id === notificationId ? { ...n, read: true } : n
+        ),
+      }));
+      if (uid) {
+        try {
+          const { getUserProfile: getFn, saveUserProfile: saveFn } = await import("@/services/firestore");
+          const freshData = await getFn(uid);
+          const freshNotifications = Array.isArray(freshData?.systemNotifications) ? freshData.systemNotifications : [];
+          const updatedNotifications = freshNotifications.map((n: SystemNotification) =>
+            n.id === notificationId ? { ...n, read: true } : n
+          );
+          await saveFn(uid, { systemNotifications: updatedNotifications });
+          setProfile((prev) => ({ ...prev, systemNotifications: updatedNotifications }));
+          console.log("Notification marked as read in Firestore:", notificationId);
+        } catch (err) {
+          console.log("Error marking notification read:", err);
+        }
+      }
     },
-    [profile.systemNotifications, updateProfile]
+    [uid]
   );
 
   const unreadNotificationCount = profile.systemNotifications.filter((n) => !n.read).length;
 
-  return {
+  return useMemo(() => ({
     profile,
     isLoggedIn,
     authLoading,
@@ -495,5 +514,12 @@ export const [UserProvider, useUser] = createContextHook(() => {
     markNotificationRead,
     unreadNotificationCount,
     isLoading: profileQuery.isLoading,
-  };
+  }), [
+    profile, isLoggedIn, authLoading, uid, updateProfile, toggleFavorite,
+    addStoreProduct, deleteStoreProduct, updateStoreProduct, addAddressSubmission,
+    deleteAddressSubmission, storeAddresses, refreshAddresses, register, login,
+    logout, resetPassword, canChangeStoreName, changeStoreName, isSubscriptionActive,
+    isTrialExpired, getTrialDaysLeft, markNotificationRead, unreadNotificationCount,
+    profileQuery.isLoading,
+  ]);
 });
