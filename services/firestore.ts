@@ -865,16 +865,27 @@ export async function verifyStorePaymentAdmin(storeId: string): Promise<void> {
 export async function sendAdminChatToMultipleUsers(
   targetUids: string[],
   messageText: string
-): Promise<number> {
+): Promise<{ sentCount: number; failCount: number; errors: string[] }> {
   let sentCount = 0;
+  let failCount = 0;
+  const errors: string[] = [];
   for (const uid of targetUids) {
     try {
+      if (!uid || uid.trim() === "") {
+        console.log("Skipping empty uid");
+        failCount++;
+        continue;
+      }
       await sendAdminChatMessage(uid, messageText);
       sentCount++;
-    } catch (error) {
-      console.log("Error sending admin chat to:", uid, error);
+      console.log("Admin chat sent successfully to:", uid);
+    } catch (error: any) {
+      failCount++;
+      const errMsg = error?.code || error?.message || String(error);
+      errors.push(`${uid}: ${errMsg}`);
+      console.log("Error sending admin chat to:", uid, errMsg);
     }
   }
-  console.log("Admin chat sent to", sentCount, "of", targetUids.length, "users");
-  return sentCount;
+  console.log("Admin chat results: sent=", sentCount, "failed=", failCount, "of", targetUids.length);
+  return { sentCount, failCount, errors };
 }

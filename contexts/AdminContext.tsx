@@ -413,13 +413,24 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
 
   const sendMessageToAll = useCallback(
     async (title: string, message: string) => {
-      try {
-        const users = await getAllUsers();
-        const chatText = `\u{1F4E2} ${title}\n\n${message}`;
-        const uids = users.map((u) => u.uid);
-        await sendAdminChatToMultipleUsers(uids, chatText);
-        const baseTime = Date.now();
-        for (let i = 0; i < users.length; i++) {
+      const users = await getAllUsers();
+      if (users.length === 0) {
+        throw new Error("Kullanici bulunamadi.");
+      }
+      const chatText = `\u{1F4E2} ${title}\n\n${message}`;
+      const validUids = users.map((u) => u.uid).filter((uid) => uid && uid.trim() !== "");
+      console.log("Sending admin message to", validUids.length, "users (total:", users.length, ")");
+
+      const chatResult = await sendAdminChatToMultipleUsers(validUids, chatText);
+      console.log("Chat results:", chatResult);
+
+      let notifSuccess = 0;
+      let notifFail = 0;
+      const baseTime = Date.now();
+      for (let i = 0; i < users.length; i++) {
+        const uid = users[i].uid;
+        if (!uid || uid.trim() === "") continue;
+        try {
           const notification = {
             id: `notif_${baseTime}_${i}_${Math.random().toString(36).substr(2, 6)}`,
             title,
@@ -428,12 +439,17 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
             createdAt: new Date().toISOString(),
             read: false,
           };
-          await sendSystemNotification(users[i].uid, notification);
+          await sendSystemNotification(uid, notification);
+          notifSuccess++;
+        } catch (err) {
+          notifFail++;
+          console.log("Notification failed for:", uid, err);
         }
-        console.log("Message sent to all users:", users.length);
-      } catch (error) {
-        console.log("Error sending message to all:", error);
-        throw error;
+      }
+      console.log("Message sent to all - chat:", chatResult.sentCount, "/", validUids.length, "notif:", notifSuccess, "/", users.length, "notifFail:", notifFail);
+
+      if (chatResult.sentCount === 0 && notifSuccess === 0) {
+        throw new Error(`Mesaj gonderilemedi. ${chatResult.errors.length > 0 ? chatResult.errors[0] : "Firestore kurallari kontrol edin."}`);
       }
     },
     []
@@ -441,13 +457,22 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
 
   const sendMessageToStoreOwners = useCallback(
     async (title: string, message: string) => {
-      try {
-        const owners = await getStoreOwners();
-        const chatText = `\u{1F3EA} ${title}\n\n${message}`;
-        const uids = owners.map((o) => o.uid);
-        await sendAdminChatToMultipleUsers(uids, chatText);
-        const baseTime = Date.now();
-        for (let i = 0; i < owners.length; i++) {
+      const owners = await getStoreOwners();
+      if (owners.length === 0) {
+        throw new Error("Magaza sahibi bulunamadi.");
+      }
+      const chatText = `\u{1F3EA} ${title}\n\n${message}`;
+      const validUids = owners.map((o) => o.uid).filter((uid) => uid && uid.trim() !== "");
+      console.log("Sending admin message to", validUids.length, "store owners");
+
+      const chatResult = await sendAdminChatToMultipleUsers(validUids, chatText);
+
+      let notifSuccess = 0;
+      const baseTime = Date.now();
+      for (let i = 0; i < owners.length; i++) {
+        const uid = owners[i].uid;
+        if (!uid || uid.trim() === "") continue;
+        try {
           const notification = {
             id: `notif_${baseTime}_${i}_${Math.random().toString(36).substr(2, 6)}`,
             title,
@@ -456,12 +481,16 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
             createdAt: new Date().toISOString(),
             read: false,
           };
-          await sendSystemNotification(owners[i].uid, notification);
+          await sendSystemNotification(uid, notification);
+          notifSuccess++;
+        } catch (err) {
+          console.log("Notification failed for store owner:", uid, err);
         }
-        console.log("Message sent to store owners:", owners.length);
-      } catch (error) {
-        console.log("Error sending message to store owners:", error);
-        throw error;
+      }
+      console.log("Message sent to store owners - chat:", chatResult.sentCount, "notif:", notifSuccess);
+
+      if (chatResult.sentCount === 0 && notifSuccess === 0) {
+        throw new Error(`Mesaj gonderilemedi. ${chatResult.errors.length > 0 ? chatResult.errors[0] : "Firestore kurallari kontrol edin."}`);
       }
     },
     []
@@ -469,14 +498,23 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
 
   const sendMessageToCustomers = useCallback(
     async (title: string, message: string) => {
-      try {
-        const allUsers = await getAllUsers();
-        const nonStoreUsers = allUsers.filter((u) => !u.isStore);
-        const chatText = `\u{1F44B} ${title}\n\n${message}`;
-        const uids = nonStoreUsers.map((u) => u.uid);
-        await sendAdminChatToMultipleUsers(uids, chatText);
-        const baseTime = Date.now();
-        for (let i = 0; i < nonStoreUsers.length; i++) {
+      const allUsers = await getAllUsers();
+      const nonStoreUsers = allUsers.filter((u) => !u.isStore);
+      if (nonStoreUsers.length === 0) {
+        throw new Error("Musteri bulunamadi.");
+      }
+      const chatText = `\u{1F44B} ${title}\n\n${message}`;
+      const validUids = nonStoreUsers.map((u) => u.uid).filter((uid) => uid && uid.trim() !== "");
+      console.log("Sending admin message to", validUids.length, "customers");
+
+      const chatResult = await sendAdminChatToMultipleUsers(validUids, chatText);
+
+      let notifSuccess = 0;
+      const baseTime = Date.now();
+      for (let i = 0; i < nonStoreUsers.length; i++) {
+        const uid = nonStoreUsers[i].uid;
+        if (!uid || uid.trim() === "") continue;
+        try {
           const notification = {
             id: `notif_${baseTime}_${i}_${Math.random().toString(36).substr(2, 6)}`,
             title,
@@ -485,12 +523,16 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
             createdAt: new Date().toISOString(),
             read: false,
           };
-          await sendSystemNotification(nonStoreUsers[i].uid, notification);
+          await sendSystemNotification(uid, notification);
+          notifSuccess++;
+        } catch (err) {
+          console.log("Notification failed for customer:", uid, err);
         }
-        console.log("Message sent to customers:", nonStoreUsers.length);
-      } catch (error) {
-        console.log("Error sending message to customers:", error);
-        throw error;
+      }
+      console.log("Message sent to customers - chat:", chatResult.sentCount, "notif:", notifSuccess);
+
+      if (chatResult.sentCount === 0 && notifSuccess === 0) {
+        throw new Error(`Mesaj gonderilemedi. ${chatResult.errors.length > 0 ? chatResult.errors[0] : "Firestore kurallari kontrol edin."}`);
       }
     },
     []

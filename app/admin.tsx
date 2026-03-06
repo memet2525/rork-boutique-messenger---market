@@ -609,8 +609,10 @@ function MessagesTab() {
       showAlert("Basarili", `Mesaj ${targetLabel} gonderildi.`);
       setTitle("");
       setMessage("");
-    } catch {
-      showAlert("Hata", "Mesaj gonderilirken bir hata olustu.");
+    } catch (err: any) {
+      const errMsg = err?.message || "Mesaj gonderilirken bir hata olustu.";
+      showAlert("Hata", errMsg);
+      console.log("Admin message send error:", err);
     } finally {
       setSending(false);
     }
