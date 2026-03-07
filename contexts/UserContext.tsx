@@ -243,9 +243,8 @@ export const [UserProvider, useUser] = createContextHook(() => {
     },
     onSuccess: (savedProfile) => {
       if (uid && savedProfile) {
-        console.log("Mutation success: updating query cache and invalidating for uid:", uid);
+        console.log("Mutation success: updating query cache for uid:", uid);
         queryClient.setQueryData(["userProfile", uid], savedProfile);
-        void queryClient.invalidateQueries({ queryKey: ["userProfile", uid] });
       }
       void queryClient.invalidateQueries({ queryKey: ["firestoreStores"] });
     },
@@ -254,9 +253,18 @@ export const [UserProvider, useUser] = createContextHook(() => {
     },
   });
 
+  const lastSaveTimeRef = useRef<number>(0);
+
   useEffect(() => {
     if (profileQuery.data) {
+      const timeSinceLastSave = Date.now() - lastSaveTimeRef.current;
+      if (timeSinceLastSave < 5000) {
+        console.log("Skipping profileQuery sync - recent save detected (", timeSinceLastSave, "ms ago)");
+        return;
+      }
+      console.log("Syncing profile from Firestore query data, name:", profileQuery.data.name);
       setProfile(profileQuery.data);
+      profileRef.current = profileQuery.data;
     }
   }, [profileQuery.data]);
 
@@ -267,11 +275,14 @@ export const [UserProvider, useUser] = createContextHook(() => {
       console.log("updateProfile called with updates:", Object.keys(updates), "name:", updated.name, "avatar:", updated.avatar?.substring(0, 60));
       setProfile(updated);
       profileRef.current = updated;
+      lastSaveTimeRef.current = Date.now();
       try {
         await saveMutation.mutateAsync(updated);
+        lastSaveTimeRef.current = Date.now();
         console.log("updateProfile: save completed successfully");
       } catch (err) {
         console.error("updateProfile: save FAILED, reverting to latest from ref:", err);
+        lastSaveTimeRef.current = 0;
         throw err;
       }
     },
