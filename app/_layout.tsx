@@ -12,7 +12,8 @@ import { AdminProvider } from "@/contexts/AdminContext";
 import { AlertProvider } from "@/contexts/AlertContext";
 import "@/config/firebase";
 
-SplashScreen.preventAutoHideAsync();
+
+void SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
@@ -192,7 +193,7 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   useEffect(() => {
-    SplashScreen.hideAsync();
+    void SplashScreen.hideAsync();
     setupWebMeta();
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       document.title = 'ButikBiz - Butikler icin akilli satis';
