@@ -69,13 +69,20 @@ export default function EditProfileScreen() {
         }
       }
 
-      console.log("Saving profile with avatar:", finalAvatar?.substring(0, 60));
+      const trimmedName = name.trim();
+      const nameParts = trimmedName.split(" ");
+      const firstName = nameParts[0] || "";
+      const lastName = nameParts.slice(1).join(" ") || "";
+
+      console.log("Saving profile - name:", trimmedName, "firstName:", firstName, "lastName:", lastName, "avatar:", finalAvatar?.substring(0, 60));
       await updateProfile({
-        name: name.trim(),
+        name: trimmedName,
+        firstName,
+        lastName,
         phone: phone.trim(),
         avatar: finalAvatar,
       });
-      console.log("Profile saved successfully");
+      console.log("Profile saved successfully to Firestore");
 
       setAvatar(finalAvatar);
 

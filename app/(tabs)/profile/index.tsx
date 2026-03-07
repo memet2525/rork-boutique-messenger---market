@@ -72,13 +72,13 @@ export default function ProfileScreen() {
             console.log("Uploading avatar from profile screen...");
             const remoteUrl = await uploadAvatar(uid, localUri);
             console.log("Avatar uploaded, saving remote URL:", remoteUrl.substring(0, 60));
-            updateProfile({ avatar: remoteUrl });
+            await updateProfile({ avatar: remoteUrl });
+            console.log("Profile avatar saved successfully");
           } catch (e) {
-            console.log("Avatar upload failed, saving local URI:", e);
-            updateProfile({ avatar: localUri });
+            console.error("Avatar upload/save failed:", e);
           }
         } else {
-          updateProfile({ avatar: localUri });
+          console.log("No uid, cannot save avatar");
         }
       }
     } catch (error) {

@@ -25,10 +25,27 @@ export async function getUserProfile(uid: string): Promise<Record<string, any> |
 
 export async function saveUserProfile(uid: string, data: Record<string, any>): Promise<void> {
   try {
-    await setDoc(doc(db, "users", uid), { ...data, updatedAt: serverTimestamp() }, { merge: true });
-    console.log("User profile saved to Firestore");
-  } catch (error) {
-    console.error("Error saving user profile:", error);
+    const cleanData: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined) {
+        cleanData[key] = value;
+      }
+    }
+    cleanData.updatedAt = serverTimestamp();
+    console.log("saveUserProfile: writing to users/" + uid, "keys:", Object.keys(cleanData).join(", "));
+    if (cleanData.name) console.log("saveUserProfile: name =", cleanData.name);
+    if (cleanData.avatar) console.log("saveUserProfile: avatar =", String(cleanData.avatar).substring(0, 80));
+    await setDoc(doc(db, "users", uid), cleanData, { merge: true });
+    console.log("saveUserProfile: SUCCESS for uid:", uid);
+    const verifySnap = await getDoc(doc(db, "users", uid));
+    if (verifySnap.exists()) {
+      const verifyData = verifySnap.data();
+      console.log("saveUserProfile: VERIFY name =", verifyData?.name, "avatar =", String(verifyData?.avatar ?? "").substring(0, 80));
+    } else {
+      console.error("saveUserProfile: VERIFY FAILED - document does not exist after save!");
+    }
+  } catch (error: any) {
+    console.error("saveUserProfile ERROR:", error?.code, error?.message, error);
     throw error;
   }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import createContextHook from "@nkzw/create-context-hook";
 import {
@@ -140,9 +140,14 @@ const DEFAULT_PROFILE: UserProfile = {
 export const [UserProvider, useUser] = createContextHook(() => {
   const queryClient = useQueryClient();
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
+  const profileRef = useRef<UserProfile>(DEFAULT_PROFILE);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [uid, setUid] = useState<string | null>(null);
+
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -192,11 +197,19 @@ export const [UserProvider, useUser] = createContextHook(() => {
 
   const saveMutation = useMutation({
     mutationFn: async (updated: UserProfile) => {
-      if (!uid) return updated;
+      if (!uid) {
+        console.log("saveMutation: uid is null, skipping save");
+        return updated;
+      }
       const { systemNotifications: _sn, ...profileWithoutNotifications } = updated;
-      console.log("Saving profile to Firestore...", uid);
-      await saveUserProfile(uid, profileWithoutNotifications);
-      console.log("Profile saved successfully to Firestore");
+      console.log("Saving profile to Firestore...", uid, "name:", updated.name, "avatar:", updated.avatar?.substring(0, 60));
+      try {
+        await saveUserProfile(uid, profileWithoutNotifications);
+        console.log("Profile saved successfully to Firestore for uid:", uid);
+      } catch (saveErr) {
+        console.error("CRITICAL: saveUserProfile failed:", saveErr);
+        throw saveErr;
+      }
       if (updated.isStore && updated.storeName) {
         const storeSlug = slugify(updated.storeName);
         await saveStore(uid, {
@@ -230,10 +243,14 @@ export const [UserProvider, useUser] = createContextHook(() => {
     },
     onSuccess: (savedProfile) => {
       if (uid && savedProfile) {
-        console.log("Updating query cache with saved profile");
+        console.log("Mutation success: updating query cache and invalidating for uid:", uid);
         queryClient.setQueryData(["userProfile", uid], savedProfile);
+        void queryClient.invalidateQueries({ queryKey: ["userProfile", uid] });
       }
       void queryClient.invalidateQueries({ queryKey: ["firestoreStores"] });
+    },
+    onError: (error) => {
+      console.error("saveMutation ERROR:", error);
     },
   });
 
@@ -245,11 +262,20 @@ export const [UserProvider, useUser] = createContextHook(() => {
 
   const updateProfile = useCallback(
     async (updates: Partial<UserProfile>): Promise<void> => {
-      const updated = { ...profile, ...updates };
+      const latestProfile = profileRef.current;
+      const updated = { ...latestProfile, ...updates };
+      console.log("updateProfile called with updates:", Object.keys(updates), "name:", updated.name, "avatar:", updated.avatar?.substring(0, 60));
       setProfile(updated);
-      await saveMutation.mutateAsync(updated);
+      profileRef.current = updated;
+      try {
+        await saveMutation.mutateAsync(updated);
+        console.log("updateProfile: save completed successfully");
+      } catch (err) {
+        console.error("updateProfile: save FAILED, reverting to latest from ref:", err);
+        throw err;
+      }
     },
-    [profile, saveMutation]
+    [saveMutation]
   );
 
   const canChangeStoreName = useCallback(() => {
