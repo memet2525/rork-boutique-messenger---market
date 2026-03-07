@@ -23,12 +23,33 @@ export async function getUserProfile(uid: string): Promise<Record<string, any> |
   }
 }
 
+function deepClean(value: any): any {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'function') return null;
+  if (Array.isArray(value)) {
+    return value.map((item) => deepClean(item)).filter((item) => item !== undefined);
+  }
+  if (typeof value === 'object' && value !== null && !(value instanceof Date)) {
+    if (value.constructor && value.constructor.name !== 'Object' && value.constructor.name !== 'Array') {
+      return value;
+    }
+    const cleaned: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (v !== undefined) {
+        cleaned[k] = deepClean(v);
+      }
+    }
+    return cleaned;
+  }
+  return value;
+}
+
 export async function saveUserProfile(uid: string, data: Record<string, any>): Promise<void> {
   try {
     const cleanData: Record<string, any> = {};
     for (const [key, value] of Object.entries(data)) {
       if (value !== undefined) {
-        cleanData[key] = value;
+        cleanData[key] = deepClean(value);
       }
     }
     cleanData.updatedAt = serverTimestamp();
@@ -37,13 +58,6 @@ export async function saveUserProfile(uid: string, data: Record<string, any>): P
     if (cleanData.avatar) console.log("saveUserProfile: avatar =", String(cleanData.avatar).substring(0, 80));
     await setDoc(doc(db, "users", uid), cleanData, { merge: true });
     console.log("saveUserProfile: SUCCESS for uid:", uid);
-    const verifySnap = await getDoc(doc(db, "users", uid));
-    if (verifySnap.exists()) {
-      const verifyData = verifySnap.data();
-      console.log("saveUserProfile: VERIFY name =", verifyData?.name, "avatar =", String(verifyData?.avatar ?? "").substring(0, 80));
-    } else {
-      console.error("saveUserProfile: VERIFY FAILED - document does not exist after save!");
-    }
   } catch (error: any) {
     console.error("saveUserProfile ERROR:", error?.code, error?.message, error);
     throw error;
