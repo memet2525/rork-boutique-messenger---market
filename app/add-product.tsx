@@ -21,7 +21,7 @@ import {
   Tag,
   Layers,
   ImagePlus,
-  Trash2,
+
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
@@ -74,14 +74,14 @@ export default function AddProductScreen() {
         const newUris = result.assets.map((asset) => asset.uri);
         setImages((prev) => [...prev, ...newUris].slice(0, MAX_IMAGES));
         if (Platform.OS !== "web") {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
       }
     } catch (error) {
       console.log("Image picker error:", error);
       showAlert("Hata", "Görsel seçilirken bir hata oluştu.");
     }
-  }, [images.length]);
+  }, [images.length, showAlert]);
 
   const takePhoto = useCallback(async () => {
     if (images.length >= MAX_IMAGES) {
@@ -105,18 +105,18 @@ export default function AddProductScreen() {
       if (!result.canceled && result.assets.length > 0) {
         setImages((prev) => [...prev, result.assets[0].uri].slice(0, MAX_IMAGES));
         if (Platform.OS !== "web") {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
       }
     } catch (error) {
       console.log("Camera error:", error);
       showAlert("Hata", "Fotoğraf çekilirken bir hata oluştu.");
     }
-  }, [images.length]);
+  }, [images.length, showAlert]);
 
   const removeImage = useCallback((index: number) => {
     if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setImages((prev) => prev.filter((_, i) => i !== index));
   }, []);
@@ -151,18 +151,25 @@ export default function AddProductScreen() {
 
     try {
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      let uploadedImages = images;
+      let uploadedImages: string[] = [];
       if (uid) {
         try {
+          console.log("Uploading", images.length, "product images...");
           uploadedImages = await Promise.all(
             images.map((uri, i) => uploadProductImage(uid, uri, i))
           );
+          console.log("All product images uploaded successfully");
         } catch (e) {
-          console.log("Image upload failed, using local URIs:", e);
+          console.error("Product image upload failed:", e);
+          showAlert("Hata", "Görseller yüklenemedi. Lütfen tekrar deneyin.");
+          setIsSubmitting(false);
+          return;
         }
+      } else {
+        uploadedImages = images;
       }
 
       const priceFormatted = price.includes("₺") ? price.trim() : `₺${price.trim()}`;

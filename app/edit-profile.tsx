@@ -17,10 +17,11 @@ import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { useUser } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
+import { uploadAvatar } from "@/services/storage";
 
 export default function EditProfileScreen() {
   const router = useRouter();
-  const { profile, updateProfile } = useUser();
+  const { profile, updateProfile, uid } = useUser();
   const { showAlert } = useAlert();
   const [name, setName] = useState<string>(profile.name);
   const [phone, setPhone] = useState<string>(profile.phone);
@@ -43,25 +44,52 @@ export default function EditProfileScreen() {
     }
   };
 
-  const handleSave = () => {
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  const handleSave = async () => {
     if (name.trim().length < 2) {
       showAlert("Hata", "İsim en az 2 karakter olmalıdır.");
       return;
     }
+    if (isSaving) return;
+    setIsSaving(true);
 
-    if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      let finalAvatar = avatar;
+      if (uid && avatar && !avatar.startsWith("http")) {
+        try {
+          console.log("Uploading avatar to Firebase Storage...");
+          finalAvatar = await uploadAvatar(uid, avatar);
+          console.log("Avatar uploaded:", finalAvatar.substring(0, 60));
+        } catch (e) {
+          console.error("Avatar upload failed:", e);
+          showAlert("Uyarı", "Profil fotoğrafı yüklenemedi. Lütfen tekrar deneyin.");
+          setIsSaving(false);
+          return;
+        }
+      }
+
+      if (Platform.OS !== "web") {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      updateProfile({
+        name: name.trim(),
+        phone: phone.trim(),
+        avatar: finalAvatar,
+      });
+
+      setAvatar(finalAvatar);
+
+      showAlert("Başarılı", "Profiliniz güncellendi.", [
+        { text: "Tamam", onPress: () => router.back() },
+      ]);
+    } catch (error) {
+      console.error("Profile save error:", error);
+      showAlert("Hata", "Profil kaydedilirken bir sorun oluştu.");
+    } finally {
+      setIsSaving(false);
     }
-
-    updateProfile({
-      name: name.trim(),
-      phone: phone.trim(),
-      avatar,
-    });
-
-    showAlert("Başarılı", "Profiliniz güncellendi.", [
-      { text: "Tamam", onPress: () => router.back() },
-    ]);
   };
 
   return (
@@ -115,8 +143,8 @@ export default function EditProfileScreen() {
           />
         </View>
 
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave} testID="save-profile">
-          <Text style={styles.saveButtonText}>Kaydet</Text>
+        <TouchableOpacity style={[styles.saveButton, isSaving && { opacity: 0.5 }]} onPress={handleSave} disabled={isSaving} testID="save-profile">
+          <Text style={styles.saveButtonText}>{isSaving ? "Kaydediliyor..." : "Kaydet"}</Text>
         </TouchableOpacity>
       </ScrollView>
     </>
