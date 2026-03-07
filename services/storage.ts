@@ -1,54 +1,40 @@
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage, auth } from "@/config/firebase";
 import { Platform } from "react-native";
 
-async function readFileAsBase64Native(uri: string): Promise<Blob> {
-  const { File: ExpoFile } = await import("expo-file-system");
-  const file = new ExpoFile(uri);
-  const bytes = await file.bytes();
-  console.log("[UPLOAD] ExpoFile bytes read, length:", bytes.length);
-  const blob = new Blob([bytes], { type: "image/jpeg" });
-  console.log("[UPLOAD] Blob created from ExpoFile, size:", blob.size);
-  return blob;
-}
-
 async function uriToBlob(uri: string): Promise<Blob> {
-  console.log("[UPLOAD] Converting URI to blob:", uri.substring(0, 50));
+  console.log("[UPLOAD] Converting URI to blob:", uri.substring(0, 80));
 
   if (Platform.OS === "web") {
     const response = await fetch(uri);
     if (!response.ok) {
       throw new Error(`[UPLOAD] Web fetch failed: ${response.status}`);
     }
-    return await response.blob();
-  }
-
-  try {
-    return await readFileAsBase64Native(uri);
-  } catch (fsError) {
-    console.log("[UPLOAD] ExpoFile failed, trying fetch:", fsError);
-  }
-
-  try {
-    const response = await fetch(uri);
     const blob = await response.blob();
-    console.log("[UPLOAD] Fetch blob success, size:", blob.size);
+    console.log("[UPLOAD] Web blob ready, size:", blob.size);
     return blob;
-  } catch (fetchError) {
-    console.log("[UPLOAD] Fetch blob failed, trying XHR:", fetchError);
   }
 
-  return new Promise((resolve, reject) => {
+  return new Promise<Blob>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.onload = () => {
-      console.log("[UPLOAD] XHR blob success, size:", (xhr.response as Blob)?.size);
-      resolve(xhr.response as Blob);
+      const blob = xhr.response as Blob;
+      if (blob && blob.size > 0) {
+        console.log("[UPLOAD] XHR blob success, size:", blob.size);
+        resolve(blob);
+      } else {
+        reject(new Error("XHR returned empty blob"));
+      }
     };
     xhr.onerror = () => {
       console.error("[UPLOAD] XHR blob failed:", xhr.statusText);
-      reject(new Error("All blob conversion methods failed"));
+      reject(new Error("XHR blob conversion failed: " + xhr.statusText));
+    };
+    xhr.ontimeout = () => {
+      reject(new Error("XHR blob conversion timed out"));
     };
     xhr.responseType = "blob";
+    xhr.timeout = 30000;
     xhr.open("GET", uri, true);
     xhr.send(null);
   });
@@ -71,38 +57,24 @@ async function uploadWithRetry(
       }
       console.log("[UPLOAD] Auth user:", currentUser.uid);
 
-      const token = await currentUser.getIdToken(true);
-      console.log("[UPLOAD] Fresh token obtained, length:", token.length);
+      await currentUser.getIdToken(true);
+      console.log("[UPLOAD] Fresh token obtained");
 
       const storageRef = ref(storage, path);
-      const metadata = { contentType: "image/jpeg" };
 
-      const uploadTask = uploadBytesResumable(storageRef, blob, metadata);
+      const contentType = blob.type && blob.type !== "" ? blob.type : "image/jpeg";
+      const metadata = { contentType };
+      console.log("[UPLOAD] Content type:", contentType, "Blob size:", blob.size);
 
-      await new Promise<void>((resolve, reject) => {
-        uploadTask.on(
-          "state_changed",
-          (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            console.log(`[UPLOAD] Progress: ${progress.toFixed(1)}%`);
-          },
-          (error) => {
-            console.error(`[UPLOAD] Upload error:`, error.code, error.message);
-            reject(error);
-          },
-          () => {
-            console.log("[UPLOAD] Upload completed successfully");
-            resolve();
-          }
-        );
-      });
+      await uploadBytes(storageRef, blob, metadata);
+      console.log("[UPLOAD] Upload completed successfully");
 
       const downloadURL = await getDownloadURL(storageRef);
       console.log("[UPLOAD] Download URL obtained:", downloadURL.substring(0, 80));
       return downloadURL;
     } catch (error: any) {
       lastError = error;
-      console.error(`[UPLOAD] Attempt ${attempt} failed:`, error?.code, error?.message);
+      console.error(`[UPLOAD] Attempt ${attempt} failed:`, error?.code, error?.message, error);
 
       if (
         error?.code === "storage/unauthorized" ||
@@ -121,7 +93,7 @@ async function uploadWithRetry(
       }
 
       if (attempt < maxRetries) {
-        const delay = attempt * 1500;
+        const delay = attempt * 2000;
         console.log(`[UPLOAD] Retrying in ${delay}ms...`);
         await new Promise((r) => setTimeout(r, delay));
       }
