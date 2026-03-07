@@ -86,21 +86,22 @@ function ProductManageCard({
   }, [product.name, onDelete, showAlert]);
 
   const handleStockChange = useCallback(() => {
-    Alert.prompt
-      ? Alert.prompt("Stok Guncelle", `${product.name} icin yeni stok adedi:`, [
-          { text: "Iptal", style: "cancel" },
-          {
-            text: "Guncelle",
-            onPress: (val?: string) => {
-              const num = parseInt(val || "0", 10);
-              if (!isNaN(num) && num >= 0) onUpdateStock(num);
-            },
+    if (Alert.prompt) {
+      Alert.prompt("Stok Guncelle", `${product.name} icin yeni stok adedi:`, [
+        { text: "Iptal", style: "cancel" },
+        {
+          text: "Guncelle",
+          onPress: (val?: string) => {
+            const num = parseInt(val || "0", 10);
+            if (!isNaN(num) && num >= 0) onUpdateStock(num);
           },
-        ], "plain-text", String(product.stock))
-      : (() => {
-          const newStock = product.stock > 0 ? product.stock + 5 : 10;
-          onUpdateStock(newStock);
-        })();
+        },
+      ], "plain-text", String(product.stock));
+      return;
+    }
+
+    const newStock = product.stock > 0 ? product.stock + 5 : 10;
+    onUpdateStock(newStock);
   }, [product.name, product.stock, onUpdateStock]);
 
   return (
@@ -147,7 +148,6 @@ function ProductManageCard({
 }
 
 function StoreOpenForm() {
-  const router = useRouter();
   const { profile, updateProfile } = useUser();
   const { showAlert } = useAlert();
   const { settings: adminSettings } = useAdmin();
@@ -183,36 +183,44 @@ function StoreOpenForm() {
     }
   }, [formatPhone]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit) return;
     if (!agreed) {
       showAlert("Sozlesme Gerekli", "Magaza acmak icin satici sozlesmesini okuyup onaylamaniz gerekmektedir.");
       return;
-    }
-    if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
 
     const now = new Date();
     const trialEnd = new Date(now);
     trialEnd.setDate(trialEnd.getDate() + 14);
 
-    updateProfile({
-      isStore: true,
-      storeName: storeName.trim(),
-      storeDescription: storeDescription.trim(),
-      storeCategory,
-      storePhone: storePhone.trim(),
-      storeCity,
-      storeNameChangeCount: 0,
-      subscriptionPlan: "trial",
-      subscriptionStatus: "active",
-      trialStartDate: now.toISOString(),
-      trialEndDate: trialEnd.toISOString(),
-    });
-    showAlert("Basarili!", `Magazaniz olusturuldu. 14 gunluk ucretsiz deneme sureciniz basladi.\n\nDeneme bitis: ${trialEnd.toLocaleDateString("tr-TR")}`, [
-      { text: "Tamam" },
-    ]);
+    try {
+      await updateProfile({
+        isStore: true,
+        storeName: storeName.trim(),
+        storeDescription: storeDescription.trim(),
+        storeCategory,
+        storePhone: storePhone.trim(),
+        storeCity,
+        storeNameChangeCount: 0,
+        subscriptionPlan: "trial",
+        subscriptionStatus: "active",
+        trialStartDate: now.toISOString(),
+        trialEndDate: trialEnd.toISOString(),
+      });
+
+      if (Platform.OS !== "web") {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      showAlert("Basarili!", `Magazaniz olusturuldu. 14 gunluk ucretsiz deneme sureciniz basladi.\n\nDeneme bitis: ${trialEnd.toLocaleDateString("tr-TR")}`, [
+        { text: "Tamam" },
+      ]);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("Store open error:", errorMessage, error);
+      showAlert("Hata", `Magaza acilirken bir sorun olustu: ${errorMessage.substring(0, 140)}`);
+    }
   };
 
   return (
@@ -223,7 +231,7 @@ function StoreOpenForm() {
         </View>
         <Text style={styles.heroTitle}>Magazanizi Acin</Text>
         <Text style={styles.heroSubtitle}>
-          ButikBiz'de urunlerinizi binlerce musteriye ulastirin. 14 gun ucretsiz deneyin!
+          ButikBiz{"'"}de urunlerinizi binlerce musteriye ulastirin. 14 gun ucretsiz deneyin!
         </Text>
       </View>
 
@@ -449,7 +457,7 @@ function StoreDashboard() {
         text: "Kapat",
         style: "destructive",
         onPress: () => {
-          updateProfile({
+          void updateProfile({
             isStore: false,
             storeName: "",
             storeProducts: [],
@@ -471,28 +479,32 @@ function StoreDashboard() {
       showAlert("Degisiklik Engellendi", "Magaza adi yalnizca 1 kez degistirilebilir. Daha once degisiklik yaptiniz.");
       return;
     }
-    Alert.prompt
-      ? Alert.prompt("Magaza Adi Degistir", "Yeni magaza adinizi girin (Bu islem sadece 1 kez yapilabilir!):", [
-          { text: "Iptal", style: "cancel" },
-          {
-            text: "Degistir",
-            onPress: (val?: string) => {
-              if (val && val.trim().length >= 3) {
-                const success = changeStoreName(val.trim());
-                if (success) {
-                  showAlert("Basarili", "Magaza adiniz degistirildi. Bu islem bir daha yapilamaz.");
-                }
+
+    if (Alert.prompt) {
+      Alert.prompt("Magaza Adi Degistir", "Yeni magaza adinizi girin (Bu islem sadece 1 kez yapilabilir!):", [
+        { text: "Iptal", style: "cancel" },
+        {
+          text: "Degistir",
+          onPress: (val?: string) => {
+            if (val && val.trim().length >= 3) {
+              const success = changeStoreName(val.trim());
+              if (success) {
+                showAlert("Basarili", "Magaza adiniz degistirildi. Bu islem bir daha yapilamaz.");
               }
-            },
+            }
           },
-        ], "plain-text", profile.storeName)
-      : showAlert("Bilgi", "Magaza adi degistirme islemi bu cihazda desteklenmiyor.");
+        },
+      ], "plain-text", profile.storeName);
+      return;
+    }
+
+    showAlert("Bilgi", "Magaza adi degistirme islemi bu cihazda desteklenmiyor.");
   }, [canChangeStoreName, changeStoreName, profile.storeName, showAlert]);
 
   const handleDeleteProduct = useCallback(
     (productId: string) => {
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       }
       deleteStoreProduct(productId);
     },
@@ -502,7 +514,7 @@ function StoreDashboard() {
   const handleUpdateStock = useCallback(
     (productId: string, stock: number) => {
       if (Platform.OS !== "web") {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
       updateStoreProduct(productId, { stock });
     },

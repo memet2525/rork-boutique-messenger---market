@@ -158,13 +158,18 @@ export default function AddProductScreen() {
       if (uid) {
         try {
           console.log("Uploading", images.length, "product images...");
-          uploadedImages = await Promise.all(
-            images.map((uri, i) => uploadProductImage(uid, uri, i))
-          );
+
+          for (const [index, uri] of images.entries()) {
+            console.log("Uploading product image", index + 1, "of", images.length);
+            const uploadedImage = await uploadProductImage(uid, uri, index);
+            uploadedImages.push(uploadedImage);
+          }
+
           console.log("All product images uploaded successfully");
-        } catch (e) {
-          console.error("Product image upload failed:", e);
-          showAlert("Hata", "Görseller yüklenemedi. Lütfen tekrar deneyin.");
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error("Product image upload failed:", errorMessage, error);
+          showAlert("Hata", `Görseller yüklenemedi: ${errorMessage.substring(0, 140)}`);
           setIsSubmitting(false);
           return;
         }

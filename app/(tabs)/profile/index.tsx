@@ -44,12 +44,11 @@ const MENU_ITEMS = [
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { profile, updateProfile, logout, uid, isSubscriptionActive, getTrialDaysLeft } = useUser();
+  const { profile, updateProfile, logout, uid, getTrialDaysLeft } = useUser();
   const { showAlert } = useAlert();
 
   const chatCount = chats.length;
   const favoriteCount = profile.favorites.length;
-  const _subActive = isSubscriptionActive();
   const trialDays = getTrialDaysLeft();
   const unreadMsgCount = profile.systemNotifications?.filter((n) => !n.read).length ?? 0;
 
@@ -66,25 +65,31 @@ export default function ProfileScreen() {
         if (Platform.OS !== "web") {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
+
         const localUri = result.assets[0].uri;
-        if (uid) {
-          try {
-            console.log("Uploading avatar from profile screen...");
-            const remoteUrl = await uploadAvatar(uid, localUri);
-            console.log("Avatar uploaded, saving remote URL:", remoteUrl.substring(0, 60));
-            await updateProfile({ avatar: remoteUrl });
-            console.log("Profile avatar saved successfully");
-          } catch (e) {
-            console.error("Avatar upload/save failed:", e);
-          }
-        } else {
-          console.log("No uid, cannot save avatar");
+
+        if (!uid) {
+          showAlert("Hata", "Oturum bulunamadı. Lütfen tekrar giriş yapın.");
+          return;
+        }
+
+        try {
+          console.log("Uploading avatar from profile screen...");
+          const remoteUrl = await uploadAvatar(uid, localUri);
+          console.log("Avatar uploaded, saving remote URL:", remoteUrl.substring(0, 60));
+          await updateProfile({ avatar: remoteUrl });
+          console.log("Profile avatar saved successfully");
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error("Avatar upload/save failed:", errorMessage, error);
+          showAlert("Hata", `Profil fotoğrafı yüklenemedi: ${errorMessage.substring(0, 120)}`);
         }
       }
     } catch (error) {
       console.log("Image picker error:", error);
+      showAlert("Hata", "Görsel seçilirken bir sorun oluştu.");
     }
-  }, [updateProfile, uid]);
+  }, [showAlert, updateProfile, uid]);
 
   const handleMenuPress = useCallback((route: string, id: string) => {
     if (id === "store" && profile.isStore) {

@@ -19,7 +19,7 @@ import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { useUser } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
-import { useAdmin, DEFAULT_USER_AGREEMENT } from "@/contexts/AdminContext";
+import { DEFAULT_USER_AGREEMENT } from "@/contexts/AdminContext";
 
 type AuthMode = "login" | "register" | "forgot";
 
@@ -85,13 +85,13 @@ export default function LoginScreen() {
   const handleLogin = useCallback(async () => {
     if (!canLogin || loading) return;
     if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setLoading(true);
     try {
       await login(email.trim(), password);
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
       showAlert("Hos Geldiniz!", "Basariyla giris yaptiniz.", [
         { text: "Tamam", onPress: () => router.back() },
@@ -107,13 +107,13 @@ export default function LoginScreen() {
   const handleRegister = useCallback(async () => {
     if (!canRegister || loading) return;
     if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setLoading(true);
     try {
       await register(firstName.trim(), lastName.trim(), email.trim(), password);
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
       showAlert("Kayit Basarili!", "Hesabiniz olusturuldu. Hos geldiniz!", [
         { text: "Tamam", onPress: () => router.back() },
@@ -371,7 +371,7 @@ export default function LoginScreen() {
                     >
                       Kullanici Sozlesmesi
                     </Text>
-                    <Text>'ni okudum ve kabul ediyorum.</Text>
+                    <Text>{"'"}ni okudum ve kabul ediyorum.</Text>
                   </Text>
                 </TouchableOpacity>
                 {!agreementAccepted && firstName.trim().length >= 2 && lastName.trim().length >= 2 && (

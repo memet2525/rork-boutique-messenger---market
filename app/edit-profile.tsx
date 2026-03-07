@@ -56,16 +56,18 @@ export default function EditProfileScreen() {
 
     try {
       let finalAvatar = avatar;
+      let avatarWarning: string | null = null;
+
       if (uid && avatar && !avatar.startsWith("http")) {
         try {
           console.log("Uploading avatar to Firebase Storage...");
           finalAvatar = await uploadAvatar(uid, avatar);
           console.log("Avatar uploaded:", finalAvatar.substring(0, 60));
-        } catch (e) {
-          console.error("Avatar upload failed:", e);
-          showAlert("Uyarı", "Profil fotoğrafı yüklenemedi. Lütfen tekrar deneyin.");
-          setIsSaving(false);
-          return;
+        } catch (error) {
+          const uploadMessage = error instanceof Error ? error.message : String(error);
+          console.error("Avatar upload failed:", uploadMessage, error);
+          avatarWarning = uploadMessage;
+          finalAvatar = profile.avatar;
         }
       }
 
@@ -74,23 +76,32 @@ export default function EditProfileScreen() {
       const firstName = nameParts[0] || "";
       const lastName = nameParts.slice(1).join(" ") || "";
 
-      const updates: Record<string, any> = {
+      const updates: Record<string, unknown> = {
         name: trimmedName,
         firstName,
         lastName,
         phone: phone.trim(),
       };
+
       if (finalAvatar) {
         updates.avatar = finalAvatar;
       }
+
       console.log("Saving profile - updates:", JSON.stringify(updates).substring(0, 200));
-      await updateProfile(updates as any);
+      await updateProfile(updates);
       console.log("Profile saved successfully to Firestore");
 
-      setAvatar(finalAvatar);
+      setAvatar(finalAvatar || profile.avatar);
 
       if (Platform.OS !== "web") {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      if (avatarWarning) {
+        showAlert("Kısmen Kaydedildi", `Profil bilgileriniz kaydedildi ancak fotoğraf yüklenemedi: ${avatarWarning.substring(0, 120)}`, [
+          { text: "Tamam", onPress: () => router.back() },
+        ]);
+        return;
       }
 
       showAlert("Başarılı", "Profiliniz güncellendi.", [
