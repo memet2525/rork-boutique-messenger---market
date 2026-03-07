@@ -74,14 +74,17 @@ export default function EditProfileScreen() {
       const firstName = nameParts[0] || "";
       const lastName = nameParts.slice(1).join(" ") || "";
 
-      console.log("Saving profile - name:", trimmedName, "firstName:", firstName, "lastName:", lastName, "avatar:", finalAvatar?.substring(0, 60));
-      await updateProfile({
+      const updates: Record<string, any> = {
         name: trimmedName,
         firstName,
         lastName,
         phone: phone.trim(),
-        avatar: finalAvatar,
-      });
+      };
+      if (finalAvatar) {
+        updates.avatar = finalAvatar;
+      }
+      console.log("Saving profile - updates:", JSON.stringify(updates).substring(0, 200));
+      await updateProfile(updates as any);
       console.log("Profile saved successfully to Firestore");
 
       setAvatar(finalAvatar);
@@ -94,8 +97,9 @@ export default function EditProfileScreen() {
         { text: "Tamam", onPress: () => router.back() },
       ]);
     } catch (error) {
-      console.error("Profile save error:", error);
-      showAlert("Hata", "Profil kaydedilirken bir sorun oluştu.");
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error("Profile save error:", errMsg, error);
+      showAlert("Hata", `Profil kaydedilirken bir sorun oluştu: ${errMsg.substring(0, 120)}`);
     } finally {
       setIsSaving(false);
     }
