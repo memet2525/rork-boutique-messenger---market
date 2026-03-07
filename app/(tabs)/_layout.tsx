@@ -1,7 +1,7 @@
 import { Tabs, useRouter } from "expo-router";
 import { MessageCircle, User, Home, ShoppingBag } from "lucide-react-native";
 import React, { useCallback } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
@@ -35,7 +35,7 @@ export default function TabLayout() {
         ]
       );
     }
-  }, [isLoggedIn, router]);
+  }, [isLoggedIn, router, showAlert]);
 
   return (
     <Tabs
@@ -47,9 +47,7 @@ export default function TabLayout() {
           backgroundColor: Colors.white,
           borderTopColor: "#E8ECF0",
           borderTopWidth: 1,
-          height: Platform.select({ ios: 90, android: 78, web: 64 }),
-          paddingBottom: Platform.select({ ios: 30, android: 20, web: 8 }),
-          paddingTop: 10,
+
           shadowColor: "#000",
           shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.04,
@@ -100,30 +98,21 @@ export default function TabLayout() {
           tabPress: handleAuthTab,
         }}
       />
-      {profile.isStore && (
-        <Tabs.Screen
-          name="my-store"
-          options={{
-            title: "Mağazam",
-            tabBarIcon: ({ color, focused }) => (
-              <View style={focused ? tabStyles.activeIconBg : undefined}>
-                <ShoppingBag color={color} size={22} strokeWidth={focused ? 2.5 : 1.8} />
-              </View>
-            ),
-          }}
-          listeners={{
-            tabPress: handleAuthTab,
-          }}
-        />
-      )}
-      {!profile.isStore && (
-        <Tabs.Screen
-          name="my-store"
-          options={{
-            href: null,
-          }}
-        />
-      )}
+      <Tabs.Screen
+        name="my-store"
+        options={{
+          title: "Mağazam",
+          href: profile.isStore ? undefined : null,
+          tabBarIcon: ({ color, focused }) => (
+            <View style={focused ? tabStyles.activeIconBg : undefined}>
+              <ShoppingBag color={color} size={22} strokeWidth={focused ? 2.5 : 1.8} />
+            </View>
+          ),
+        }}
+        listeners={{
+          tabPress: handleAuthTab,
+        }}
+      />
       <Tabs.Screen
         name="profile"
         options={{
