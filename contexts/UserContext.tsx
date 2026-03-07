@@ -137,6 +137,11 @@ const DEFAULT_PROFILE: UserProfile = {
   ],
 };
 
+interface SaveProfileMutationInput {
+  nextProfile: UserProfile;
+  profilePatch: Partial<UserProfile>;
+}
+
 export const [UserProvider, useUser] = createContextHook(() => {
   const queryClient = useQueryClient();
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
@@ -196,37 +201,52 @@ export const [UserProvider, useUser] = createContextHook(() => {
   });
 
   const saveMutation = useMutation({
-    mutationFn: async (updated: UserProfile) => {
+    mutationFn: async ({ nextProfile, profilePatch }: SaveProfileMutationInput) => {
       if (!uid) {
         console.log("saveMutation: uid is null, skipping save");
-        return updated;
+        return nextProfile;
       }
-      const { systemNotifications: _sn, ...profileWithoutNotifications } = updated;
-      console.log("Saving profile to Firestore...", uid, "name:", updated.name, "avatar:", updated.avatar?.substring(0, 60));
+
+      const { systemNotifications: _ignoredSystemNotifications, ...profileWithoutNotifications } = profilePatch;
+      const patchKeys = Object.keys(profileWithoutNotifications);
+      console.log(
+        "Saving profile patch to Firestore...",
+        uid,
+        "keys:",
+        patchKeys.join(", ") || "none",
+        "name:",
+        nextProfile.name,
+        "avatar:",
+        nextProfile.avatar?.substring(0, 60)
+      );
+
       try {
-        await saveUserProfile(uid, profileWithoutNotifications);
+        if (patchKeys.length > 0) {
+          await saveUserProfile(uid, profileWithoutNotifications as Record<string, unknown>);
+        }
         console.log("Profile saved successfully to Firestore for uid:", uid);
       } catch (saveErr) {
         console.error("CRITICAL: saveUserProfile failed:", saveErr);
         throw saveErr;
       }
-      if (updated.isStore && updated.storeName) {
-        const storeSlug = slugify(updated.storeName);
+
+      if (nextProfile.isStore && nextProfile.storeName) {
+        const storeSlug = slugify(nextProfile.storeName);
         await saveStore(uid, {
-          name: updated.storeName,
+          name: nextProfile.storeName,
           slug: storeSlug,
-          avatar: updated.avatar,
-          description: updated.storeDescription || "",
-          category: updated.storeCategory || "Diger",
-          city: updated.storeCity || "",
-          phone: updated.storePhone || "",
+          avatar: nextProfile.avatar,
+          description: nextProfile.storeDescription || "",
+          category: nextProfile.storeCategory || "Diger",
+          city: nextProfile.storeCity || "",
+          phone: nextProfile.storePhone || "",
           rating: 5.0,
           reviewCount: 0,
           isOnline: true,
           ownerId: uid,
-          subscriptionPlan: updated.subscriptionPlan,
-          subscriptionStatus: updated.subscriptionStatus,
-          products: (updated.storeProducts ?? []).map((sp) => ({
+          subscriptionPlan: nextProfile.subscriptionPlan,
+          subscriptionStatus: nextProfile.subscriptionStatus,
+          products: (nextProfile.storeProducts ?? []).map((sp) => ({
             id: sp.id,
             name: sp.name,
             price: sp.price,
@@ -236,10 +256,11 @@ export const [UserProvider, useUser] = createContextHook(() => {
             features: sp.features,
           })),
         });
-      } else if (!updated.isStore) {
+      } else if (!nextProfile.isStore) {
         await deleteStore(uid);
       }
-      return updated;
+
+      return nextProfile;
     },
     onSuccess: (savedProfile) => {
       if (uid && savedProfile) {
@@ -277,7 +298,10 @@ export const [UserProvider, useUser] = createContextHook(() => {
       profileRef.current = updated;
       lastSaveTimeRef.current = Date.now();
       try {
-        await saveMutation.mutateAsync(updated);
+        await saveMutation.mutateAsync({
+          nextProfile: updated,
+          profilePatch: updates,
+        });
         lastSaveTimeRef.current = Date.now();
         console.log("updateProfile: save completed successfully");
       } catch (err) {
@@ -305,7 +329,13 @@ export const [UserProvider, useUser] = createContextHook(() => {
         storeNameChangeCount: profile.storeNameChangeCount + 1,
       };
       setProfile(updated);
-      saveMutation.mutate(updated);
+      saveMutation.mutate({
+        nextProfile: updated,
+        profilePatch: {
+          storeName: newName,
+          storeNameChangeCount: profile.storeNameChangeCount + 1,
+        },
+      });
       return true;
     },
     [profile, saveMutation]

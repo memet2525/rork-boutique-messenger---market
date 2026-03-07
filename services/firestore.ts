@@ -11,17 +11,40 @@ import {
   where,
   arrayUnion,
 } from "firebase/firestore";
-import { db } from "@/config/firebase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import { auth, db } from "@/config/firebase";
 
 export async function getUserProfile(uid: string): Promise<Record<string, any> | null> {
+  const cachedProfile = await readCachedUserProfile(uid);
+
   try {
     const docSnap = await getDoc(doc(db, "users", uid));
-    return docSnap.exists() ? docSnap.data() : null;
+    const remoteProfile = docSnap.exists() ? docSnap.data() : null;
+
+    if (!remoteProfile) {
+      return cachedProfile;
+    }
+
+    const mergedProfile = cachedProfile
+      ? { ...remoteProfile, ...cachedProfile }
+      : remoteProfile;
+
+    await AsyncStorage.setItem(getUserProfileCacheKey(uid), JSON.stringify(mergedProfile));
+    return mergedProfile;
   } catch (error) {
     console.log("Error loading user profile:", error);
+
+    if (cachedProfile) {
+      console.log("getUserProfile: using cached profile after Firestore read failure for uid:", uid);
+      return cachedProfile;
+    }
+
     return null;
   }
 }
+
+const USER_PROFILE_CACHE_KEY_PREFIX = "user_profile_cache:";
 
 function deepClean(value: any): any {
   if (value === undefined || value === null) return null;
@@ -44,21 +67,117 @@ function deepClean(value: any): any {
   return value;
 }
 
-export async function saveUserProfile(uid: string, data: Record<string, any>): Promise<void> {
+function getUserProfileCacheKey(uid: string): string {
+  return `${USER_PROFILE_CACHE_KEY_PREFIX}${uid}`;
+}
+
+function isPermissionDeniedError(error: unknown): boolean {
+  const rawCode = typeof error === "object" && error !== null && "code" in error
+    ? (error as { code?: unknown }).code
+    : "";
+  const code = typeof rawCode === "string" ? rawCode : "";
+  const message = error instanceof Error
+    ? error.message.toLowerCase()
+    : typeof error === "string"
+      ? error.toLowerCase()
+      : "";
+
+  return code.includes("permission-denied")
+    || message.includes("permission-denied")
+    || message.includes("missing or insufficient permissions");
+}
+
+async function readCachedUserProfile(uid: string): Promise<Record<string, any> | null> {
   try {
-    const cleanData: Record<string, any> = {};
-    for (const [key, value] of Object.entries(data)) {
-      if (value !== undefined) {
-        cleanData[key] = deepClean(value);
-      }
+    const rawValue = await AsyncStorage.getItem(getUserProfileCacheKey(uid));
+    if (!rawValue) {
+      return null;
     }
-    cleanData.updatedAt = serverTimestamp();
+
+    const parsedValue = JSON.parse(rawValue) as Record<string, any>;
+    console.log("getUserProfile: loaded cached profile for uid:", uid, "keys:", Object.keys(parsedValue).join(", "));
+    return parsedValue;
+  } catch (error) {
+    console.log("getUserProfile: failed to read cached profile:", error);
+    return null;
+  }
+}
+
+async function writeCachedUserProfile(uid: string, patch: Record<string, any>): Promise<void> {
+  try {
+    const currentCachedProfile = await readCachedUserProfile(uid);
+    const mergedProfile = {
+      ...(currentCachedProfile ?? {}),
+      ...deepClean(patch),
+      uid,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await AsyncStorage.setItem(getUserProfileCacheKey(uid), JSON.stringify(mergedProfile));
+    console.log("saveUserProfile: cached profile locally for uid:", uid, "keys:", Object.keys(patch).join(", "));
+  } catch (error) {
+    console.log("saveUserProfile: failed to cache profile locally:", error);
+  }
+}
+
+async function ensureFreshAuthSession(expectedUid: string): Promise<void> {
+  const currentUser = auth.currentUser;
+  console.log("saveUserProfile: current auth uid:", currentUser?.uid ?? "NONE", "target uid:", expectedUid);
+
+  if (!currentUser) {
+    throw new Error("Oturum bulunamadı. Lütfen tekrar giriş yapın.");
+  }
+
+  if (currentUser.uid !== expectedUid) {
+    throw new Error("Hesap oturumu uyuşmuyor. Lütfen çıkış yapıp tekrar giriş yapın.");
+  }
+
+  await currentUser.getIdToken(true);
+}
+
+export async function saveUserProfile(uid: string, data: Record<string, any>): Promise<void> {
+  const cleanData: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) {
+      cleanData[key] = deepClean(value);
+    }
+  }
+
+  cleanData.uid = uid;
+
+  await writeCachedUserProfile(uid, cleanData);
+
+  try {
     console.log("saveUserProfile: writing to users/" + uid, "keys:", Object.keys(cleanData).join(", "));
     if (cleanData.name) console.log("saveUserProfile: name =", cleanData.name);
     if (cleanData.avatar) console.log("saveUserProfile: avatar =", String(cleanData.avatar).substring(0, 80));
-    await setDoc(doc(db, "users", uid), cleanData, { merge: true });
+
+    await ensureFreshAuthSession(uid);
+
+    const userRef = doc(db, "users", uid);
+    const existingProfile = await getDoc(userRef);
+
+    if (existingProfile.exists()) {
+      await updateDoc(userRef, {
+        ...cleanData,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await setDoc(userRef, {
+        ...cleanData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    }
+
     console.log("saveUserProfile: SUCCESS for uid:", uid);
   } catch (error: any) {
+    if (isPermissionDeniedError(error)) {
+      console.warn("saveUserProfile: permission denied, local cache kept for uid:", uid, error?.code, error?.message);
+      return;
+    }
+
     console.error("saveUserProfile ERROR:", error?.code, error?.message, error);
     throw error;
   }
