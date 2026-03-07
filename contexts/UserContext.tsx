@@ -194,7 +194,9 @@ export const [UserProvider, useUser] = createContextHook(() => {
     mutationFn: async (updated: UserProfile) => {
       if (!uid) return updated;
       const { systemNotifications: _sn, ...profileWithoutNotifications } = updated;
+      console.log("Saving profile to Firestore...", uid);
       await saveUserProfile(uid, profileWithoutNotifications);
+      console.log("Profile saved successfully to Firestore");
       if (updated.isStore && updated.storeName) {
         const storeSlug = slugify(updated.storeName);
         await saveStore(uid, {
@@ -226,7 +228,11 @@ export const [UserProvider, useUser] = createContextHook(() => {
       }
       return updated;
     },
-    onSuccess: () => {
+    onSuccess: (savedProfile) => {
+      if (uid && savedProfile) {
+        console.log("Updating query cache with saved profile");
+        queryClient.setQueryData(["userProfile", uid], savedProfile);
+      }
       void queryClient.invalidateQueries({ queryKey: ["firestoreStores"] });
     },
   });

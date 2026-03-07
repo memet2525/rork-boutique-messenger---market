@@ -49,7 +49,7 @@ export default function ProfileScreen() {
 
   const chatCount = chats.length;
   const favoriteCount = profile.favorites.length;
-  const subActive = isSubscriptionActive();
+  const _subActive = isSubscriptionActive();
   const trialDays = getTrialDaysLeft();
   const unreadMsgCount = profile.systemNotifications?.filter((n) => !n.read).length ?? 0;
 
@@ -64,22 +64,27 @@ export default function ProfileScreen() {
 
       if (!result.canceled && result.assets[0]) {
         if (Platform.OS !== "web") {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
         const localUri = result.assets[0].uri;
-        updateProfile({ avatar: localUri });
         if (uid) {
-          uploadAvatar(uid, localUri).then((remoteUrl) => {
-            if (remoteUrl !== localUri) {
-              updateProfile({ avatar: remoteUrl });
-            }
-          }).catch((e) => console.log("Avatar upload failed:", e));
+          try {
+            console.log("Uploading avatar from profile screen...");
+            const remoteUrl = await uploadAvatar(uid, localUri);
+            console.log("Avatar uploaded, saving remote URL:", remoteUrl.substring(0, 60));
+            updateProfile({ avatar: remoteUrl });
+          } catch (e) {
+            console.log("Avatar upload failed, saving local URI:", e);
+            updateProfile({ avatar: localUri });
+          }
+        } else {
+          updateProfile({ avatar: localUri });
         }
       }
     } catch (error) {
       console.log("Image picker error:", error);
     }
-  }, [updateProfile]);
+  }, [updateProfile, uid]);
 
   const handleMenuPress = useCallback((route: string, id: string) => {
     if (id === "store" && profile.isStore) {
@@ -100,9 +105,9 @@ export default function ProfileScreen() {
           style: "destructive",
           onPress: () => {
             if (Platform.OS !== "web") {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             }
-            logout();
+            void logout();
           },
         },
       ]
