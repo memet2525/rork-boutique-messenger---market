@@ -45,7 +45,7 @@ export default function AddProductScreen() {
   const [description, setDescription] = useState<string>("");
   const [stock, setStock] = useState<string>("1");
   const [category, setCategory] = useState<string>("");
-  const [images, setImages] = useState<string[]>([]);
+  const [images, setImages] = useState<ImagePicker.ImagePickerAsset[]>([]);
   const [features, setFeatures] = useState<string[]>([""]);
 
   const canSubmit =
@@ -71,8 +71,7 @@ export default function AddProductScreen() {
       });
 
       if (!result.canceled && result.assets.length > 0) {
-        const newUris = result.assets.map((asset) => asset.uri);
-        setImages((prev) => [...prev, ...newUris].slice(0, MAX_IMAGES));
+        setImages((prev) => [...prev, ...result.assets].slice(0, MAX_IMAGES));
         if (Platform.OS !== "web") {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
@@ -103,7 +102,7 @@ export default function AddProductScreen() {
       });
 
       if (!result.canceled && result.assets.length > 0) {
-        setImages((prev) => [...prev, result.assets[0].uri].slice(0, MAX_IMAGES));
+        setImages((prev) => [...prev, result.assets[0]].slice(0, MAX_IMAGES));
         if (Platform.OS !== "web") {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
@@ -159,9 +158,9 @@ export default function AddProductScreen() {
         try {
           console.log("Uploading", images.length, "product images...");
 
-          for (const [index, uri] of images.entries()) {
-            console.log("Uploading product image", index + 1, "of", images.length);
-            const uploadedImage = await uploadProductImage(uid, uri, index);
+          for (const [index, imageAsset] of images.entries()) {
+            console.log("Uploading product image", index + 1, "of", images.length, "uri:", imageAsset.uri.substring(0, 120));
+            const uploadedImage = await uploadProductImage(uid, imageAsset, index);
             uploadedImages.push(uploadedImage);
           }
 
@@ -174,7 +173,7 @@ export default function AddProductScreen() {
           return;
         }
       } else {
-        uploadedImages = images;
+        uploadedImages = images.map((imageAsset) => imageAsset.uri);
       }
 
       const priceFormatted = price.includes("₺") ? price.trim() : `₺${price.trim()}`;
@@ -222,9 +221,9 @@ export default function AddProductScreen() {
               Cihazınızdan görsel seçin veya fotoğraf çekin (maks. {MAX_IMAGES})
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
-              {images.map((uri, index) => (
+              {images.map((imageAsset, index) => (
                 <View key={`img-${index}`} style={styles.imageWrapper}>
-                  <Image source={{ uri }} style={styles.imageOptionImg} />
+                  <Image source={{ uri: imageAsset.uri }} style={styles.imageOptionImg} />
                   {index === 0 && (
                     <View style={styles.mainBadge}>
                       <Text style={styles.mainBadgeText}>Ana</Text>

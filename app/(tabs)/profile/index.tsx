@@ -66,7 +66,7 @@ export default function ProfileScreen() {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
 
-        const localUri = result.assets[0].uri;
+        const pickedAsset = result.assets[0];
 
         if (!uid) {
           showAlert("Hata", "Oturum bulunamadı. Lütfen tekrar giriş yapın.");
@@ -75,7 +75,7 @@ export default function ProfileScreen() {
 
         try {
           console.log("Uploading avatar from profile screen...");
-          const remoteUrl = await uploadAvatar(uid, localUri);
+          const remoteUrl = await uploadAvatar(uid, pickedAsset);
           console.log("Avatar uploaded, saving remote URL:", remoteUrl.substring(0, 60));
           await updateProfile({ avatar: remoteUrl });
           console.log("Profile avatar saved successfully");

@@ -26,6 +26,7 @@ export default function EditProfileScreen() {
   const [name, setName] = useState<string>(profile.name);
   const [phone, setPhone] = useState<string>(profile.phone);
   const [avatar, setAvatar] = useState<string>(profile.avatar);
+  const [avatarAsset, setAvatarAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
 
   const pickImage = async () => {
     try {
@@ -38,6 +39,7 @@ export default function EditProfileScreen() {
 
       if (!result.canceled && result.assets[0]) {
         setAvatar(result.assets[0].uri);
+        setAvatarAsset(result.assets[0]);
       }
     } catch (error) {
       console.log("Image picker error:", error);
@@ -61,8 +63,9 @@ export default function EditProfileScreen() {
       if (uid && avatar && !avatar.startsWith("http")) {
         try {
           console.log("Uploading avatar to Firebase Storage...");
-          finalAvatar = await uploadAvatar(uid, avatar);
+          finalAvatar = await uploadAvatar(uid, avatarAsset ?? avatar);
           console.log("Avatar uploaded:", finalAvatar.substring(0, 60));
+          setAvatarAsset(null);
         } catch (error) {
           const uploadMessage = error instanceof Error ? error.message : String(error);
           console.error("Avatar upload failed:", uploadMessage, error);

@@ -6,6 +6,13 @@ import { auth, storage } from "@/config/firebase";
 const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 const PRODUCT_MAX_BYTES = 10 * 1024 * 1024;
 
+type UploadImageSource = string | {
+  uri: string;
+  file?: Blob | null;
+  mimeType?: string | null;
+  fileSize?: number | null;
+};
+
 function formatMegabytes(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1);
 }
@@ -34,6 +41,7 @@ function normalizeUploadError(error: unknown): Error {
     : typeof error === "string"
       ? error
       : "Bilinmeyen yükleme hatası";
+  const normalizedMessage = errorMessage.toLowerCase();
 
   if (errorCode === "storage/unauthorized" || errorCode === "storage/unauthenticated") {
     return new Error("Oturum doğrulanamadı. Lütfen hesabınıza tekrar giriş yapıp yeniden deneyin.");
@@ -47,11 +55,80 @@ function normalizeUploadError(error: unknown): Error {
     return new Error("Bağlantı zayıf görünüyor. İnternetinizi kontrol edip tekrar deneyin.");
   }
 
-  if (errorMessage.toLowerCase().includes("network request failed")) {
+  if (normalizedMessage.includes("network request failed")) {
     return new Error("Görsel okunamadı. Farklı bir görsel seçip tekrar deneyin.");
   }
 
+  if (normalizedMessage.includes("permission") || normalizedMessage.includes("unauthorized")) {
+    return new Error("Depolama izni reddedildi. Lütfen tekrar giriş yapıp yeniden deneyin.");
+  }
+
   return new Error(errorMessage);
+}
+
+function isUploadAsset(source: UploadImageSource): source is Exclude<UploadImageSource, string> {
+  return typeof source === "object" && source !== null && "uri" in source;
+}
+
+function getSourceUri(source: UploadImageSource): string {
+  return typeof source === "string" ? source : source.uri;
+}
+
+function isRemoteHttpUri(uri: string): boolean {
+  return uri.startsWith("http://") || uri.startsWith("https://");
+}
+
+function getKnownFileSize(source: UploadImageSource): number | null {
+  if (!isUploadAsset(source)) {
+    return null;
+  }
+
+  if (typeof source.file?.size === "number") {
+    return source.file.size;
+  }
+
+  if (typeof source.fileSize === "number") {
+    return source.fileSize;
+  }
+
+  return null;
+}
+
+function inferContentTypeFromUri(uri: string): string {
+  const normalizedUri = uri.toLowerCase();
+
+  if (normalizedUri.startsWith("data:image/")) {
+    const match = normalizedUri.match(/^data:(image\/[a-z0-9.+-]+);/);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  if (normalizedUri.endsWith(".png")) {
+    return "image/png";
+  }
+
+  if (normalizedUri.endsWith(".webp")) {
+    return "image/webp";
+  }
+
+  if (normalizedUri.endsWith(".gif")) {
+    return "image/gif";
+  }
+
+  return "image/jpeg";
+}
+
+function resolveContentType(source: UploadImageSource, blob?: Blob): string {
+  if (isUploadAsset(source) && typeof source.mimeType === "string" && source.mimeType.trim().length > 0) {
+    return source.mimeType;
+  }
+
+  if (typeof blob?.type === "string" && blob.type.trim().length > 0) {
+    return blob.type;
+  }
+
+  return inferContentTypeFromUri(getSourceUri(source));
 }
 
 async function fetchBlob(uri: string): Promise<Blob> {
@@ -114,7 +191,21 @@ async function uriToBlob(uri: string): Promise<Blob> {
   return xhrBlob(uri);
 }
 
-async function uploadWithRetry(blob: Blob, path: string, maxRetries: number = 3): Promise<string> {
+async function sourceToBlob(source: UploadImageSource): Promise<Blob> {
+  if (isUploadAsset(source) && source.file && typeof source.file.size === "number") {
+    console.log("[UPLOAD] Using provided picker file directly, size:", source.file.size, "type:", source.file.type || "unknown");
+    return source.file;
+  }
+
+  return uriToBlob(getSourceUri(source));
+}
+
+async function uploadWithRetry(
+  blob: Blob,
+  path: string,
+  contentType: string,
+  maxRetries: number = 3,
+): Promise<string> {
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
@@ -131,7 +222,6 @@ async function uploadWithRetry(blob: Blob, path: string, maxRetries: number = 3)
       console.log("[UPLOAD] Fresh token obtained");
 
       const storageRef = ref(storage, path);
-      const contentType = blob.type && blob.type !== "" ? blob.type : "image/jpeg";
       const metadata = { contentType };
 
       console.log("[UPLOAD] Content type:", contentType, "Blob size:", blob.size);
@@ -173,46 +263,62 @@ async function uploadWithRetry(blob: Blob, path: string, maxRetries: number = 3)
   throw normalizeUploadError(lastError);
 }
 
-export async function uploadImage(uri: string, path: string): Promise<string> {
+export async function uploadImage(source: UploadImageSource, path: string): Promise<string> {
+  const uri = getSourceUri(source);
+  const knownFileSize = getKnownFileSize(source);
+  const maxBytes = getMaxBytesForPath(path);
+
   console.log("[UPLOAD] === START uploadImage ===");
   console.log("[UPLOAD] Path:", path);
   console.log("[UPLOAD] URI:", uri.substring(0, 120));
   console.log("[UPLOAD] Platform:", Platform.OS);
   console.log("[UPLOAD] Auth user:", auth.currentUser?.uid ?? "NONE");
+  console.log("[UPLOAD] Known picker size:", knownFileSize ?? "unknown");
 
   if (!auth.currentUser) {
     throw new Error("Kullanıcı oturumu bulunamadı. Lütfen tekrar giriş yapın.");
   }
 
-  const blob = await uriToBlob(uri);
-  console.log("[UPLOAD] Blob ready, size:", blob.size, "type:", blob.type || "unknown");
-
-  if (blob.size === 0) {
-    throw new Error("Görsel okunamadı. Lütfen başka bir görsel deneyin.");
-  }
-
-  const maxBytes = getMaxBytesForPath(path);
-  if (blob.size > maxBytes) {
+  if (typeof knownFileSize === "number" && knownFileSize > maxBytes) {
     throw new Error(`Görsel çok büyük. En fazla ${formatMegabytes(maxBytes)} MB dosya yükleyebilirsiniz.`);
   }
 
-  const downloadURL = await uploadWithRetry(blob, path);
+  const blob = await sourceToBlob(source);
+  const blobSize = blob.size;
+  const finalSize = blobSize > 0 ? blobSize : knownFileSize ?? 0;
+  const contentType = resolveContentType(source, blob);
+
+  console.log("[UPLOAD] Blob ready, size:", blobSize, "final size:", finalSize, "type:", contentType);
+
+  if (finalSize === 0) {
+    throw new Error("Görsel okunamadı. Lütfen başka bir görsel deneyin.");
+  }
+
+  if (finalSize > maxBytes) {
+    throw new Error(`Görsel çok büyük. En fazla ${formatMegabytes(maxBytes)} MB dosya yükleyebilirsiniz.`);
+  }
+
+  const downloadURL = await uploadWithRetry(blob, path, contentType);
   console.log("[UPLOAD] === DONE uploadImage ===", downloadURL.substring(0, 120));
   return downloadURL;
 }
 
-export async function uploadAvatar(uid: string, uri: string): Promise<string> {
-  if (uri.startsWith("http://") || uri.startsWith("https://")) {
+export async function uploadAvatar(uid: string, source: UploadImageSource): Promise<string> {
+  const uri = getSourceUri(source);
+
+  if (isRemoteHttpUri(uri)) {
     return uri;
   }
 
-  return uploadImage(uri, `avatars/${uid}_${Date.now()}.jpg`);
+  return uploadImage(source, `avatars/${uid}_${Date.now()}.jpg`);
 }
 
-export async function uploadProductImage(storeId: string, uri: string, index: number): Promise<string> {
-  if (uri.startsWith("http://") || uri.startsWith("https://")) {
+export async function uploadProductImage(storeId: string, source: UploadImageSource, index: number): Promise<string> {
+  const uri = getSourceUri(source);
+
+  if (isRemoteHttpUri(uri)) {
     return uri;
   }
 
-  return uploadImage(uri, `products/${storeId}/${Date.now()}_${index}.jpg`);
+  return uploadImage(source, `products/${storeId}/${Date.now()}_${index}.jpg`);
 }
