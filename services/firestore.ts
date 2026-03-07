@@ -28,7 +28,8 @@ export async function saveUserProfile(uid: string, data: Record<string, any>): P
     await setDoc(doc(db, "users", uid), { ...data, updatedAt: serverTimestamp() }, { merge: true });
     console.log("User profile saved to Firestore");
   } catch (error) {
-    console.log("Error saving user profile:", error);
+    console.error("Error saving user profile:", error);
+    throw error;
   }
 }
 

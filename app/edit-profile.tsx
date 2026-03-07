@@ -69,17 +69,19 @@ export default function EditProfileScreen() {
         }
       }
 
-      if (Platform.OS !== "web") {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-
-      updateProfile({
+      console.log("Saving profile with avatar:", finalAvatar?.substring(0, 60));
+      await updateProfile({
         name: name.trim(),
         phone: phone.trim(),
         avatar: finalAvatar,
       });
+      console.log("Profile saved successfully");
 
       setAvatar(finalAvatar);
+
+      if (Platform.OS !== "web") {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
 
       showAlert("Başarılı", "Profiliniz güncellendi.", [
         { text: "Tamam", onPress: () => router.back() },

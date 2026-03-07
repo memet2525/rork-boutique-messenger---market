@@ -244,10 +244,10 @@ export const [UserProvider, useUser] = createContextHook(() => {
   }, [profileQuery.data]);
 
   const updateProfile = useCallback(
-    (updates: Partial<UserProfile>) => {
+    async (updates: Partial<UserProfile>): Promise<void> => {
       const updated = { ...profile, ...updates };
       setProfile(updated);
-      saveMutation.mutate(updated);
+      await saveMutation.mutateAsync(updated);
     },
     [profile, saveMutation]
   );
@@ -304,7 +304,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
       const favorites = profile.favorites.includes(productId)
         ? profile.favorites.filter((id) => id !== productId)
         : [...profile.favorites, productId];
-      updateProfile({ favorites });
+      void updateProfile({ favorites });
     },
     [profile.favorites, updateProfile]
   );
@@ -317,7 +317,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
         createdAt: new Date().toISOString(),
       };
       const updated = [...profile.storeProducts, newProduct];
-      updateProfile({ storeProducts: updated });
+      void updateProfile({ storeProducts: updated });
       return newProduct;
     },
     [profile.storeProducts, updateProfile]
@@ -326,7 +326,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
   const deleteStoreProduct = useCallback(
     (productId: string) => {
       const updated = profile.storeProducts.filter((p) => p.id !== productId);
-      updateProfile({ storeProducts: updated });
+      void updateProfile({ storeProducts: updated });
     },
     [profile.storeProducts, updateProfile]
   );
@@ -336,7 +336,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
       const updated = profile.storeProducts.map((p) =>
         p.id === productId ? { ...p, ...updates } : p
       );
-      updateProfile({ storeProducts: updated });
+      void updateProfile({ storeProducts: updated });
     },
     [profile.storeProducts, updateProfile]
   );
@@ -353,7 +353,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
         createdAt: new Date().toISOString(),
       };
       const updated = [...profile.addressSubmissions, newAddress];
-      updateProfile({ addressSubmissions: updated });
+      void updateProfile({ addressSubmissions: updated });
       return newAddress;
     },
     [profile.addressSubmissions, updateProfile]
@@ -368,7 +368,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
         }
       }
       const updated = profile.addressSubmissions.filter((a) => a.id !== addressId);
-      updateProfile({ addressSubmissions: updated });
+      void updateProfile({ addressSubmissions: updated });
     },
     [profile.addressSubmissions, updateProfile, uid, queryClient]
   );
