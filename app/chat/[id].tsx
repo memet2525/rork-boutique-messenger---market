@@ -53,7 +53,7 @@ interface ProductCard {
   price: string;
 }
 
-function MessageBubble({ message }: { message: DisplayMessage }) {
+function MessageBubble({ message, avatar }: { message: DisplayMessage; avatar?: string }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -67,34 +67,39 @@ function MessageBubble({ message }: { message: DisplayMessage }) {
   return (
     <Animated.View
       style={[
-        styles.bubbleContainer,
-        message.isSent ? styles.sentContainer : styles.receivedContainer,
+        styles.bubbleRow,
+        message.isSent ? styles.sentRow : styles.receivedRow,
         { opacity: fadeAnim },
       ]}
     >
-      <View
-        style={[
-          styles.bubble,
-          message.isSent ? styles.sentBubble : styles.receivedBubble,
-        ]}
-      >
-        <Text style={[styles.messageText, message.isSent ? styles.sentText : styles.receivedText]}>
-          {message.text}
-        </Text>
-        <View style={styles.messageFooter}>
-          <Text style={[styles.timestamp, message.isSent && styles.sentTimestamp]}>
-            {message.timestamp}
+      {!message.isSent && (
+        <Image source={{ uri: avatar }} style={styles.messageAvatar} />
+      )}
+      <View style={[styles.bubbleContainer, message.isSent ? styles.sentContainer : styles.receivedContainer]}>
+        <View
+          style={[
+            styles.bubble,
+            message.isSent ? styles.sentBubble : styles.receivedBubble,
+          ]}
+        >
+          <Text style={[styles.messageText, message.isSent ? styles.sentText : styles.receivedText]}>
+            {message.text}
           </Text>
-          {message.isSent && (
-            message.isRead ? (
-              <CheckCheck size={14} color="#34B7F1" />
-            ) : (
-              <CheckCheck size={14} color="#92A4A3" />
-            )
-          )}
+          <View style={styles.messageFooter}>
+            <Text style={[styles.timestamp, message.isSent && styles.sentTimestamp]}>
+              {message.timestamp}
+            </Text>
+            {message.isSent && (
+              message.isRead ? (
+                <CheckCheck size={14} color="#34B7F1" />
+              ) : (
+                <CheckCheck size={14} color="#92A4A3" />
+              )
+            )}
+          </View>
         </View>
+        <View style={message.isSent ? styles.sentTail : styles.receivedTail} />
       </View>
-      <View style={message.isSent ? styles.sentTail : styles.receivedTail} />
     </Animated.View>
   );
 }
@@ -549,7 +554,7 @@ export default function ChatDetailScreen() {
     if (item.isProductCard && productCard) {
       return <ProductMessageBubble product={productCard} timestamp={item.timestamp} />;
     }
-    return <MessageBubble message={item} />;
+    return <MessageBubble message={item} avatar={resolvedStoreAvatar} />;
   };
 
   return (
@@ -716,10 +721,30 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     gap: 3,
   },
-  bubbleContainer: {
-    maxWidth: "80%",
+  bubbleRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
     marginVertical: 1,
+    maxWidth: "85%",
+  },
+  sentRow: {
+    alignSelf: "flex-end",
+  },
+  receivedRow: {
+    alignSelf: "flex-start",
+  },
+  messageAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 6,
+    marginBottom: 2,
+    backgroundColor: Colors.border,
+  },
+  bubbleContainer: {
+    maxWidth: "100%",
     position: "relative",
+    flexShrink: 1,
   },
   sentContainer: {
     alignSelf: "flex-end",
