@@ -250,10 +250,13 @@ export default function ProductDetailScreen() {
 
   const startChatMutation = useMutation({
     mutationFn: async () => {
-      if (!uid) throw new Error("No uid");
+      if (!uid) throw new Error("Giriş yapmalısınız");
       const targetStoreId = storeData?.id ?? storeId ?? "unknown";
+      if (!resolvedStoreOwnerId || resolvedStoreOwnerId === "unknown") {
+        throw new Error("Mağaza bilgisi alınamadı. Lütfen tekrar deneyin.");
+      }
       const chatId = getChatId(uid, resolvedStoreOwnerId);
-      console.log("Creating chat from product - storeOwnerId:", resolvedStoreOwnerId, "storeId:", targetStoreId, "chatId:", chatId);
+      console.log("Creating chat from product - storeOwnerId:", resolvedStoreOwnerId, "storeId:", targetStoreId, "chatId:", chatId, "uid:", uid);
       await getOrCreateChat({
         chatId,
         userId: uid,
@@ -262,11 +265,12 @@ export default function ProductDetailScreen() {
         storeAvatar: storeData?.avatar ?? "",
         storeOwnerId: resolvedStoreOwnerId,
         customerName: profile.name || profile.firstName || "Müşteri",
-        customerAvatar: profile.avatar,
+        customerAvatar: profile.avatar || "",
       });
       return { chatId, targetStoreId };
     },
     onSuccess: ({ chatId, targetStoreId }) => {
+      console.log("Product chat created successfully:", chatId);
       void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
       const productInfo = `🛍️ ${productData?.name}\n💰 ${productData?.price}\n\nBu ürün hakkında bilgi almak istiyorum.`;
       router.push({
@@ -285,9 +289,9 @@ export default function ProductDetailScreen() {
         },
       });
     },
-    onError: (err) => {
-      console.log("Chat creation error from product:", err);
-      showAlert("Hata", "Sohbet başlatılırken bir hata oluştu. Lütfen tekrar deneyin.");
+    onError: (err: any) => {
+      console.error("Chat creation error from product:", err?.message, err);
+      showAlert("Hata", err?.message || "Sohbet başlatılırken bir hata oluştu. Lütfen tekrar deneyin.");
     },
   });
 

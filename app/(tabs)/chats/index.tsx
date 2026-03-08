@@ -180,7 +180,8 @@ export default function ChatsScreen() {
     mutationFn: async (store: FirestoreStoreItem) => {
       if (!uid) throw new Error("Giriş yapmalısınız");
       const storeOwnerId = store.ownerId || store.id;
-      const chatId = getChatId(uid, store.id);
+      const chatId = getChatId(uid, storeOwnerId);
+      console.log("startChatMutation: uid:", uid, "storeId:", store.id, "storeOwnerId:", storeOwnerId, "chatId:", chatId);
       await getOrCreateChat({
         chatId,
         userId: uid,
@@ -189,11 +190,12 @@ export default function ChatsScreen() {
         storeAvatar: store.avatar || "",
         storeOwnerId,
         customerName: profile.name || profile.firstName || "Müşteri",
-        customerAvatar: profile.avatar,
+        customerAvatar: profile.avatar || "",
       });
       return { chatId, store, storeOwnerId };
     },
     onSuccess: ({ chatId, store, storeOwnerId }) => {
+      console.log("startChatMutation: success, navigating to chat:", chatId);
       setShowStorePicker(false);
       setStoreSearch("");
       void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
@@ -209,8 +211,9 @@ export default function ChatsScreen() {
         },
       });
     },
-    onError: () => {
-      showAlert("Hata", "Sohbet başlatılırken bir hata oluştu.");
+    onError: (error: any) => {
+      console.error("startChatMutation ERROR:", error?.message, error);
+      showAlert("Hata", error?.message || "Sohbet başlatılırken bir hata oluştu. Lütfen tekrar deneyin.");
     },
   });
 

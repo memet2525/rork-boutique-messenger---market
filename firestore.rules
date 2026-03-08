@@ -21,10 +21,19 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["systemNotifications", "updatedAt"]);
     }
 
-    function canReadChat(chatId) {
+    function isParticipant() {
+      return isSignedIn()
+        && resource != null
+        && (
+          isSuperAdmin()
+          || request.auth.uid in resource.data.participants
+        );
+    }
+
+    function canReadChatById(chatId) {
       let chat = get(/databases/$(database)/documents/chats/$(chatId));
       return isSignedIn()
-        && chat.exists()
+        && chat != null
         && (
           isSuperAdmin()
           || request.auth.uid in chat.data.participants
@@ -67,7 +76,7 @@ service cloud.firestore {
     function validMessageCreate(chatId, messageId) {
       let chat = get(/databases/$(database)/documents/chats/$(chatId));
       return isSignedIn()
-        && chat.exists()
+        && chat != null
         && request.resource.data.id == messageId
         && request.resource.data.text is string
         && request.resource.data.text.size() > 0
@@ -158,18 +167,18 @@ service cloud.firestore {
     }
 
     match /chats/{chatId} {
-      allow read: if canReadChat(chatId);
+      allow read: if isParticipant();
       allow create: if validChatCreate(chatId);
-      allow update: if canReadChat(chatId)
+      allow update: if isParticipant()
         && chatIdentityUnchanged();
       allow delete: if isSuperAdmin();
 
       match /messages/{messageId} {
-        allow read: if canReadChat(chatId);
+        allow read: if canReadChatById(chatId);
         allow create: if validMessageCreate(chatId, messageId);
-        allow update: if canReadChat(chatId)
+        allow update: if canReadChatById(chatId)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["isRead"]);
-        allow delete: if canReadChat(chatId);
+        allow delete: if canReadChatById(chatId);
       }
     }
 

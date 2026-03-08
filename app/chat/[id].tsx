@@ -203,20 +203,20 @@ export default function ChatDetailScreen() {
     if (!id || !uid || isAdminChat) return;
 
     if (text.trim().length > 0) {
-      setTypingStatus(id, uid, true);
+      void setTypingStatus(id, uid, true);
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
       typingTimeoutRef.current = setTimeout(() => {
         if (id && uid) {
-          setTypingStatus(id, uid, false);
+          void setTypingStatus(id, uid, false);
         }
       }, 5000);
     } else {
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
-      setTypingStatus(id, uid, false);
+      void setTypingStatus(id, uid, false);
     }
   }, [id, uid, isAdminChat]);
 
@@ -226,7 +226,7 @@ export default function ChatDetailScreen() {
         clearTimeout(typingTimeoutRef.current);
       }
       if (id && uid) {
-        setTypingStatus(id, uid, false);
+        void setTypingStatus(id, uid, false);
       }
     };
   }, [id, uid]);
@@ -247,9 +247,9 @@ export default function ChatDetailScreen() {
         (msg: FirestoreMessage) => msg.senderId !== uid && !msg.isRead
       );
       if (hasUnread) {
-        markMessagesAsRead(id, uid).then(() => {
-          queryClient.invalidateQueries({ queryKey: ["chatMessages", id] });
-          queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+        void markMessagesAsRead(id, uid).then(() => {
+          void queryClient.invalidateQueries({ queryKey: ["chatMessages", id] });
+          void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
         });
       }
     }
@@ -271,7 +271,7 @@ export default function ChatDetailScreen() {
         const newMessages = display.slice(prevCount);
         const hasIncomingMessage = newMessages.some((msg) => !msg.isSent);
         if (hasIncomingMessage) {
-          playNotificationSound();
+          void playNotificationSound();
           console.log("New incoming message detected, playing sound");
         }
       }
@@ -288,7 +288,7 @@ export default function ChatDetailScreen() {
       if (storeId) {
         const storeData = stores.find((s) => s.id === storeId);
         const resolvedOwnerId = storeOwnerIdParam || storeId || "unknown";
-        console.log("Chat init with storeOwnerId:", resolvedOwnerId, "storeId:", storeId, "uid:", uid);
+        console.log("Chat init with storeOwnerId:", resolvedOwnerId, "storeId:", storeId, "uid:", uid, "chatId:", id);
 
         getOrCreateChat({
           chatId: id,
@@ -298,13 +298,13 @@ export default function ChatDetailScreen() {
           storeAvatar: storeAvatar ?? storeData?.avatar ?? "",
           storeOwnerId: resolvedOwnerId,
           customerName: profile.name || profile.firstName || "Müşteri",
-          customerAvatar: profile.avatar,
+          customerAvatar: profile.avatar || "",
         }).then(() => {
           console.log("Chat created/initialized:", id, "participants:", [uid, resolvedOwnerId]);
           setIsChatReady(true);
-          queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
-        }).catch((err) => {
-          console.log("Chat init error:", err);
+          void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+        }).catch((err: any) => {
+          console.error("Chat init error:", err?.message, err);
           setIsChatReady(true);
         });
       } else {
@@ -323,8 +323,8 @@ export default function ChatDetailScreen() {
       setLocalMessages([]);
       setProductCard(null);
       prevMessageCountRef.current = 0;
-      queryClient.invalidateQueries({ queryKey: ["chatMessages", id] });
-      queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+      void queryClient.invalidateQueries({ queryKey: ["chatMessages", id] });
+      void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
       setMenuVisible(false);
       console.log("Chat cleared successfully");
     },
@@ -360,8 +360,8 @@ export default function ChatDetailScreen() {
       return sendChatMessage(id, { text, senderId: uid });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["chatMessages", id] });
-      queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+      void queryClient.invalidateQueries({ queryKey: ["chatMessages", id] });
+      void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
     },
   });
 
@@ -386,7 +386,7 @@ export default function ChatDetailScreen() {
     if (!messageText.trim()) return;
 
     if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
 
     Animated.sequence([
@@ -395,7 +395,7 @@ export default function ChatDetailScreen() {
     ]).start();
 
     if (id && uid) {
-      setTypingStatus(id, uid, false);
+      void setTypingStatus(id, uid, false);
     }
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -419,7 +419,7 @@ export default function ChatDetailScreen() {
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
-  }, [messageText, sendScaleAnim, sendMessageMutate]);
+  }, [messageText, sendScaleAnim, sendMessageMutate, id, uid]);
 
   const findStoreId = useCallback(() => {
     if (storeId) return storeId;

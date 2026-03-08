@@ -473,6 +473,14 @@ export async function getOrCreateChat(params: {
   customerAvatar: string;
 }): Promise<FirestoreChat> {
   try {
+    if (!params.userId || !params.storeId) {
+      throw new Error("Geçersiz sohbet parametreleri: userId veya storeId eksik.");
+    }
+    if (!params.storeOwnerId || params.storeOwnerId === "unknown") {
+      console.log("getOrCreateChat: storeOwnerId geçersiz, storeId kullanılıyor:", params.storeId);
+      params.storeOwnerId = params.storeId;
+    }
+
     const chatRef = doc(db, "chats", params.chatId);
     let chatSnap: any = null;
     try {
@@ -482,17 +490,23 @@ export async function getOrCreateChat(params: {
       chatSnap = null;
     }
     if (chatSnap && chatSnap.exists()) {
+      console.log("Chat already exists:", params.chatId);
       return { id: chatSnap.id, ...chatSnap.data() } as FirestoreChat;
     }
+
+    const uniqueParticipants = params.userId === params.storeOwnerId
+      ? [params.userId, params.storeOwnerId]
+      : [params.userId, params.storeOwnerId];
+
     const newChat: Omit<FirestoreChat, "id"> = {
-      participants: [params.userId, params.storeOwnerId],
+      participants: uniqueParticipants,
       storeId: params.storeId,
-      storeName: params.storeName,
-      storeAvatar: params.storeAvatar,
+      storeName: params.storeName || "Mağaza",
+      storeAvatar: params.storeAvatar || "",
       storeOwnerId: params.storeOwnerId,
       customerId: params.userId,
-      customerName: params.customerName,
-      customerAvatar: params.customerAvatar,
+      customerName: params.customerName || "Müşteri",
+      customerAvatar: params.customerAvatar || "",
       lastMessage: "",
       lastMessageTime: "",
       lastMessageTimestamp: serverTimestamp(),
@@ -500,8 +514,10 @@ export async function getOrCreateChat(params: {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
+
+    console.log("Creating chat:", params.chatId, "participants:", uniqueParticipants, "customerId:", params.userId, "storeOwnerId:", params.storeOwnerId);
     await setDoc(chatRef, newChat);
-    console.log("Chat created:", params.chatId, "participants:", [params.userId, params.storeOwnerId]);
+    console.log("Chat created successfully:", params.chatId);
 
     if (params.storeOwnerId && params.storeOwnerId !== params.userId) {
       sendChatNotification(
@@ -512,8 +528,11 @@ export async function getOrCreateChat(params: {
     }
 
     return { id: params.chatId, ...newChat };
-  } catch (error) {
-    console.log("Error creating chat:", error);
+  } catch (error: any) {
+    console.error("Error creating chat:", params.chatId, error?.code, error?.message, error);
+    if (isPermissionDeniedError(error)) {
+      throw new Error("Sohbet oluşturma izni reddedildi. Lütfen tekrar giriş yapın.");
+    }
     throw error;
   }
 }
@@ -560,18 +579,18 @@ export async function sendChatMessage(chatId: string, message: {
     await setDoc(msgRef, msgData);
 
     const chatRef = doc(db, "chats", chatId);
-    await setDoc(chatRef, {
-      lastMessage: message.text,
-      lastMessageTime: timeStr,
-      lastMessageTimestamp: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      hiddenBy: [],
-    }, { merge: true });
-
     try {
       const chatSnap = await getDoc(chatRef);
       if (chatSnap.exists()) {
         const chatData = chatSnap.data();
+
+        await updateDoc(chatRef, {
+          lastMessage: message.text,
+          lastMessageTime: timeStr,
+          lastMessageTimestamp: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
         const participants = (chatData.participants as string[]) ?? [];
         const recipientId = participants.find((p) => p !== message.senderId);
         if (recipientId) {
@@ -585,9 +604,11 @@ export async function sendChatMessage(chatId: string, message: {
             `${senderName}: ${shortText}`
           ).catch((err) => console.log("Message notification error:", err));
         }
+      } else {
+        console.log("sendChatMessage: chat doc not found for update, skipping:", chatId);
       }
-    } catch (notifErr) {
-      console.log("Error sending message notification:", notifErr);
+    } catch (updateErr: any) {
+      console.log("sendChatMessage: chat update failed (non-critical):", updateErr?.code, updateErr?.message);
     }
 
     console.log("Message sent:", msgId, "to chat:", chatId);
