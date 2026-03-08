@@ -87,6 +87,22 @@ function isPermissionDeniedError(error: unknown): boolean {
     || message.includes("missing or insufficient permissions");
 }
 
+function normalizeFirestoreWriteError(error: unknown, fallbackMessage: string): Error {
+  if (isPermissionDeniedError(error)) {
+    return new Error("Firebase izni reddedildi. Firestore kurallarını yayınlayıp tekrar deneyin.");
+  }
+
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return new Error(error.message);
+  }
+
+  if (typeof error === "string" && error.trim().length > 0) {
+    return new Error(error);
+  }
+
+  return new Error(fallbackMessage);
+}
+
 async function readCachedUserProfile(uid: string): Promise<Record<string, any> | null> {
   try {
     const rawValue = await AsyncStorage.getItem(getUserProfileCacheKey(uid));
@@ -222,10 +238,36 @@ export async function getFirestoreStoreBySlug(slug: string): Promise<Record<stri
 
 export async function saveStore(storeId: string, data: Record<string, any>): Promise<void> {
   try {
-    await setDoc(doc(db, "stores", storeId), { ...data, updatedAt: serverTimestamp() }, { merge: true });
-    console.log("Store saved to Firestore");
+    await ensureFreshAuthSession(storeId);
+
+    const cleanData = deepClean({
+      ...data,
+      ownerId: storeId,
+    });
+    const storeRef = doc(db, "stores", storeId);
+
+    console.log("saveStore: writing to stores/" + storeId, "keys:", Object.keys(cleanData).join(", "));
+
+    const existingStore = await getDoc(storeRef);
+
+    if (existingStore.exists()) {
+      await updateDoc(storeRef, {
+        ...cleanData,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await setDoc(storeRef, {
+        ...cleanData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    }
+
+    console.log("Store saved to Firestore:", storeId);
   } catch (error) {
-    console.log("Error saving store:", error);
+    const writeError = normalizeFirestoreWriteError(error, "Mağaza kaydedilemedi. Lütfen tekrar deneyin.");
+    console.error("Error saving store:", error);
+    throw writeError;
   }
 }
 

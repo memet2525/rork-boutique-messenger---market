@@ -377,17 +377,28 @@ export const [UserProvider, useUser] = createContextHook(() => {
   );
 
   const addStoreProduct = useCallback(
-    (product: Omit<StoreProduct, "id" | "createdAt">) => {
+    async (product: Omit<StoreProduct, "id" | "createdAt">): Promise<StoreProduct> => {
+      if (!uid) {
+        throw new Error("Oturum bulunamadı. Lütfen tekrar giriş yapın.");
+      }
+
+      const latestProfile = profileRef.current;
+      if (!latestProfile.isStore || latestProfile.storeName.trim().length === 0) {
+        throw new Error("Ürün eklemek için önce mağaza açmanız gerekiyor.");
+      }
+
       const newProduct: StoreProduct = {
         ...product,
         id: `sp_${Date.now()}`,
         createdAt: new Date().toISOString(),
       };
-      const updated = [...profile.storeProducts, newProduct];
-      void updateProfile({ storeProducts: updated });
+      const latestProducts = Array.isArray(latestProfile.storeProducts) ? latestProfile.storeProducts : [];
+      const updated = [...latestProducts, newProduct];
+
+      await updateProfile({ storeProducts: updated });
       return newProduct;
     },
-    [profile.storeProducts, updateProfile]
+    [uid, updateProfile]
   );
 
   const deleteStoreProduct = useCallback(

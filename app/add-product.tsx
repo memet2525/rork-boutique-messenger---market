@@ -36,7 +36,7 @@ const MAX_IMAGES = 6;
 
 export default function AddProductScreen() {
   const router = useRouter();
-  const { addStoreProduct, uid } = useUser();
+  const { addStoreProduct, uid, profile } = useUser();
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const { showAlert } = useAlert();
 
@@ -146,13 +146,15 @@ export default function AddProductScreen() {
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || isSubmitting) return;
+
+    if (!profile.isStore || profile.storeName.trim().length === 0) {
+      showAlert("Mağaza Gerekli", "Ürün eklemeden önce mağazanızı açmanız gerekiyor.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      if (Platform.OS !== "web") {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-
       let uploadedImages: string[] = [];
       if (uid) {
         try {
@@ -169,7 +171,6 @@ export default function AddProductScreen() {
           const errorMessage = error instanceof Error ? error.message : String(error);
           console.error("Product image upload failed:", errorMessage, error);
           showAlert("Hata", `Görseller yüklenemedi: ${errorMessage.substring(0, 140)}`);
-          setIsSubmitting(false);
           return;
         }
       } else {
@@ -177,8 +178,7 @@ export default function AddProductScreen() {
       }
 
       const priceFormatted = price.includes("₺") ? price.trim() : `₺${price.trim()}`;
-
-      addStoreProduct({
+      const createdProduct = await addStoreProduct({
         name: name.trim(),
         price: priceFormatted,
         image: uploadedImages[0],
@@ -189,16 +189,23 @@ export default function AddProductScreen() {
         features: features.filter((f) => f.trim().length > 0),
       });
 
+      console.log("Product saved successfully:", createdProduct.id, createdProduct.name);
+
+      if (Platform.OS !== "web") {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
       showAlert("Başarılı!", `"${name.trim()}" ürünü mağazanıza eklendi.`, [
         { text: "Tamam", onPress: () => router.back() },
       ]);
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Ürün eklenirken bir hata oluştu.";
       console.log("Submit error:", error);
-      showAlert("Hata", "Ürün eklenirken bir hata oluştu.");
+      showAlert("Hata", errorMessage);
     } finally {
       setIsSubmitting(false);
     }
-  }, [canSubmit, isSubmitting, name, price, images, description, stock, category, features, addStoreProduct, router, showAlert, uid]);
+  }, [canSubmit, isSubmitting, profile.isStore, profile.storeName, name, price, images, description, stock, category, features, addStoreProduct, router, showAlert, uid]);
 
   return (
     <>
