@@ -179,8 +179,11 @@ export default function ChatDetailScreen() {
 
   const isAdminChat = storeId === BUTIKBIZ_ADMIN_ID || id?.startsWith("admin_");
 
-  const resolvedStoreName = isAdminChat ? BUTIKBIZ_NAME : (storeName ?? "Mağaza");
-  const resolvedStoreAvatar = isAdminChat ? BUTIKBIZ_AVATAR : (storeAvatar ?? "");
+  const [liveStoreName, setLiveStoreName] = useState<string>(storeName ?? "Mağaza");
+  const [liveStoreAvatar, setLiveStoreAvatar] = useState<string>(storeAvatar ?? "");
+
+  const resolvedStoreName = isAdminChat ? BUTIKBIZ_NAME : liveStoreName;
+  const resolvedStoreAvatar = isAdminChat ? BUTIKBIZ_AVATAR : liveStoreAvatar;
   const resolvedIsOnline = isOnline === "true";
 
   const mergedMessages = React.useMemo(() => {
@@ -372,9 +375,16 @@ export default function ChatDetailScreen() {
           storeOwnerId: resolvedOwnerId,
           customerName: profile.name || profile.firstName || "Müşteri",
           customerAvatar: profile.avatar || "",
-        }).then(() => {
+        }).then((chatData) => {
           console.log("Chat created/initialized:", id);
           chatInitDone.current = true;
+          if (chatData) {
+            const isOwner = uid === chatData.storeOwnerId;
+            const freshName = isOwner ? chatData.customerName : chatData.storeName;
+            const freshAvatar = isOwner ? chatData.customerAvatar : chatData.storeAvatar;
+            if (freshName) setLiveStoreName(freshName);
+            if (freshAvatar) setLiveStoreAvatar(freshAvatar);
+          }
           void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
         }).catch((err: any) => {
           console.error("Chat init error:", err?.message, err);

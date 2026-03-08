@@ -496,7 +496,33 @@ export async function getOrCreateChat(params: {
 
     if (chatSnap && chatSnap.exists()) {
       console.log("Chat already exists:", params.chatId);
-      return { id: chatSnap.id, ...chatSnap.data() } as FirestoreChat;
+      const existingData = chatSnap.data() as FirestoreChat;
+      const updates: Record<string, any> = {};
+      const isCustomer = params.userId === existingData.customerId || params.userId !== existingData.storeOwnerId;
+      if (isCustomer) {
+        if (params.customerAvatar && params.customerAvatar !== existingData.customerAvatar) {
+          updates.customerAvatar = params.customerAvatar;
+        }
+        if (params.customerName && params.customerName !== existingData.customerName) {
+          updates.customerName = params.customerName;
+        }
+      } else {
+        if (params.storeAvatar && params.storeAvatar !== existingData.storeAvatar) {
+          updates.storeAvatar = params.storeAvatar;
+        }
+        if (params.storeName && params.storeName !== existingData.storeName) {
+          updates.storeName = params.storeName;
+        }
+      }
+      if (Object.keys(updates).length > 0) {
+        console.log("Updating chat avatar/name fields:", params.chatId, updates);
+        try {
+          await updateDoc(chatRef, updates);
+        } catch (updateErr: any) {
+          console.log("Chat avatar update failed (non-critical):", updateErr?.message);
+        }
+      }
+      return { ...existingData, ...updates, id: chatSnap.id } as FirestoreChat;
     }
 
     if (readPermissionDenied) {
