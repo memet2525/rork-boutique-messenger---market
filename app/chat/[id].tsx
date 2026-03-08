@@ -16,7 +16,7 @@ import { Image } from "expo-image";
 import { useLocalSearchParams, Stack, useRouter } from "expo-router";
 import { Send, CheckCheck, Paperclip, Smile, MapPin, MoreVertical, Trash2 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { stores } from "@/mocks/stores";
@@ -27,9 +27,9 @@ import {
   clearChatMessages,
   markMessagesAsRead,
   setTypingStatus,
-  getTypingStatus,
   subscribeToChatMessages,
   getChatMessages,
+  subscribeToTypingStatus,
   FirestoreMessage,
   BUTIKBIZ_ADMIN_ID,
   BUTIKBIZ_NAME,
@@ -44,6 +44,7 @@ interface DisplayMessage {
   isSent: boolean;
   isRead: boolean;
   isProductCard?: boolean;
+  isOptimistic?: boolean;
 }
 
 interface ProductCard {
@@ -156,33 +157,48 @@ export default function ChatDetailScreen() {
   const queryClient = useQueryClient();
   const { profile, uid } = useUser();
   const [messageText, setMessageText] = useState<string>("");
-  const [localMessages, setLocalMessages] = useState<DisplayMessage[]>([]);
+  const [firestoreMessages, setFirestoreMessages] = useState<FirestoreMessage[]>([]);
+  const [optimisticMessages, setOptimisticMessages] = useState<DisplayMessage[]>([]);
   const [productCard, setProductCard] = useState<ProductCard | null>(null);
-  const [isChatReady, setIsChatReady] = useState<boolean>(false);
+  const [isLoadingMessages, setIsLoadingMessages] = useState<boolean>(true);
   const [menuVisible, setMenuVisible] = useState<boolean>(false);
+  const [isOtherTyping, setIsOtherTyping] = useState<boolean>(false);
   const flatListRef = useRef<FlatList>(null);
   const sendScaleAnim = useRef(new Animated.Value(1)).current;
   const hasInjectedProduct = useRef(false);
   const chatInitialized = useRef(false);
+  const chatInitDone = useRef(false);
   const prevMessageCountRef = useRef<number>(0);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isOtherTyping, setIsOtherTyping] = useState<boolean>(false);
   const typingDotAnim = useRef(new Animated.Value(0)).current;
+  const subscriptionRef = useRef<(() => void) | null>(null);
+  const typingSubRef = useRef<(() => void) | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isAdminChat = storeId === BUTIKBIZ_ADMIN_ID || id?.startsWith("admin_");
 
-  const typingQuery = useQuery({
-    queryKey: ["typingStatus", id, uid],
-    queryFn: () => getTypingStatus(id!, uid!),
-    enabled: !!id && !!uid && !isAdminChat,
-    refetchInterval: 3000,
-  });
+  const resolvedStoreName = isAdminChat ? BUTIKBIZ_NAME : (storeName ?? "Mağaza");
+  const resolvedStoreAvatar = isAdminChat ? BUTIKBIZ_AVATAR : (storeAvatar ?? "");
+  const resolvedIsOnline = isOnline === "true";
 
-  useEffect(() => {
-    if (typingQuery.data !== undefined) {
-      setIsOtherTyping(typingQuery.data);
-    }
-  }, [typingQuery.data]);
+  const mergedMessages = React.useMemo(() => {
+    if (!uid) return [];
+    const display: DisplayMessage[] = firestoreMessages.map((msg: FirestoreMessage) => ({
+      id: msg.id,
+      text: msg.text,
+      timestamp: msg.timestamp,
+      isSent: msg.senderId === uid,
+      isRead: msg.isRead,
+      isProductCard: msg.text.includes("Bu ürün hakkında bilgi almak istiyorum") && msg.senderId === uid,
+    }));
+
+    const firestoreTexts = new Set(firestoreMessages.map((m) => `${m.text}::${m.senderId}`));
+    const pendingOptimistic = optimisticMessages.filter(
+      (opt) => !firestoreTexts.has(`${opt.text}::${uid}`)
+    );
+
+    return [...display, ...pendingOptimistic];
+  }, [firestoreMessages, optimisticMessages, uid]);
 
   useEffect(() => {
     if (isOtherTyping) {
@@ -198,6 +214,23 @@ export default function ChatDetailScreen() {
       typingDotAnim.setValue(0);
     }
   }, [isOtherTyping, typingDotAnim]);
+
+  useEffect(() => {
+    if (!id || !uid || isAdminChat) return;
+
+    console.log("Starting typing subscription for chat:", id);
+    const unsub = subscribeToTypingStatus(id, uid, (typing) => {
+      setIsOtherTyping(typing);
+    });
+    typingSubRef.current = unsub;
+
+    return () => {
+      if (typingSubRef.current) {
+        typingSubRef.current();
+        typingSubRef.current = null;
+      }
+    };
+  }, [id, uid, isAdminChat]);
 
   const handleTextChange = useCallback((text: string) => {
     setMessageText(text);
@@ -231,35 +264,31 @@ export default function ChatDetailScreen() {
       }
     };
   }, [id, uid]);
-  const resolvedStoreName = isAdminChat ? BUTIKBIZ_NAME : (storeName ?? "Mağaza");
-  const resolvedStoreAvatar = isAdminChat ? BUTIKBIZ_AVATAR : (storeAvatar ?? "");
-  const resolvedIsOnline = isOnline === "true";
-
-  const [firestoreMessages, setFirestoreMessages] = useState<FirestoreMessage[]>([]);
-  const [isLoadingMessages, setIsLoadingMessages] = useState<boolean>(true);
-  const [_subscriptionFailed, setSubscriptionError] = useState<boolean>(false);
-  const subscriptionRef = useRef<(() => void) | null>(null);
 
   const startSubscription = useCallback(() => {
     if (!id) return;
+
     if (subscriptionRef.current) {
       subscriptionRef.current();
       subscriptionRef.current = null;
     }
-    setSubscriptionError(false);
-    setIsLoadingMessages(true);
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+
     console.log("Starting message subscription for chat:", id);
     const unsubscribe = subscribeToChatMessages(
       id,
       (messages) => {
+        console.log("Realtime messages received:", messages.length, "for chat:", id);
         setFirestoreMessages(messages);
         setIsLoadingMessages(false);
-        setSubscriptionError(false);
       },
       (error) => {
-        console.log("Message subscription error, attempting fallback fetch:", error);
+        console.log("Message subscription error:", error?.code || error?.message || error);
         setIsLoadingMessages(false);
-        setSubscriptionError(true);
+
         getChatMessages(id).then((msgs) => {
           if (msgs.length > 0) {
             setFirestoreMessages(msgs);
@@ -268,22 +297,33 @@ export default function ChatDetailScreen() {
         }).catch((fetchErr) => {
           console.log("Fallback fetch also failed:", fetchErr);
         });
+
+        retryTimerRef.current = setTimeout(() => {
+          console.log("Retrying subscription for chat:", id);
+          startSubscription();
+        }, 5000);
       }
     );
     subscriptionRef.current = unsubscribe;
   }, [id]);
 
   useEffect(() => {
-    if (!id || !isChatReady) return;
-    console.log("Chat is ready, starting subscription for:", id);
+    if (!id) return;
+
+    console.log("Chat opened, starting subscription immediately for:", id);
     startSubscription();
+
     return () => {
       if (subscriptionRef.current) {
         subscriptionRef.current();
         subscriptionRef.current = null;
       }
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
     };
-  }, [id, isChatReady, startSubscription]);
+  }, [id, startSubscription]);
 
   useEffect(() => {
     if (id && uid && firestoreMessages.length > 0) {
@@ -299,29 +339,17 @@ export default function ChatDetailScreen() {
   }, [id, uid, firestoreMessages, queryClient]);
 
   useEffect(() => {
-    if (firestoreMessages && uid) {
-      const display: DisplayMessage[] = firestoreMessages.map((msg: FirestoreMessage) => ({
-        id: msg.id,
-        text: msg.text,
-        timestamp: msg.timestamp,
-        isSent: msg.senderId === uid,
-        isRead: msg.isRead,
-        isProductCard: msg.text.includes("Bu ürün hakkında bilgi almak istiyorum") && msg.senderId === uid,
-      }));
-
+    if (firestoreMessages.length > 0 && uid) {
       const prevCount = prevMessageCountRef.current;
-      if (prevCount > 0 && display.length > prevCount) {
-        const newMessages = display.slice(prevCount);
-        const hasIncomingMessage = newMessages.some((msg) => !msg.isSent);
-        if (hasIncomingMessage) {
+      if (prevCount > 0 && firestoreMessages.length > prevCount) {
+        const newMsgs = firestoreMessages.slice(prevCount);
+        const hasIncoming = newMsgs.some((msg) => msg.senderId !== uid);
+        if (hasIncoming) {
           void playNotificationSound();
           console.log("New incoming message detected, playing sound");
         }
       }
-      prevMessageCountRef.current = display.length;
-
-      setLocalMessages(display);
-      console.log("Messages synced from Firestore realtime:", display.length);
+      prevMessageCountRef.current = firestoreMessages.length;
     }
   }, [firestoreMessages, uid]);
 
@@ -343,16 +371,16 @@ export default function ChatDetailScreen() {
           customerName: profile.name || profile.firstName || "Müşteri",
           customerAvatar: profile.avatar || "",
         }).then(() => {
-          console.log("Chat created/initialized:", id, "participants:", [uid, resolvedOwnerId]);
-          setIsChatReady(true);
+          console.log("Chat created/initialized:", id);
+          chatInitDone.current = true;
           void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
         }).catch((err: any) => {
           console.error("Chat init error:", err?.message, err);
-          setIsChatReady(true);
+          chatInitDone.current = true;
         });
       } else {
-        console.log("Chat opened without storeId, marking ready:", id);
-        setIsChatReady(true);
+        console.log("Chat opened without storeId, ready:", id);
+        chatInitDone.current = true;
       }
     }
   }, [id, uid, storeId, storeName, storeAvatar, storeOwnerIdParam, profile, queryClient]);
@@ -363,7 +391,8 @@ export default function ChatDetailScreen() {
       return clearChatMessages(id);
     },
     onSuccess: () => {
-      setLocalMessages([]);
+      setFirestoreMessages([]);
+      setOptimisticMessages([]);
       setProductCard(null);
       prevMessageCountRef.current = 0;
       void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
@@ -403,29 +432,35 @@ export default function ChatDetailScreen() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
-      if (!subscriptionRef.current) {
-        console.log("Subscription was dead, restarting after send success");
-        startSubscription();
-      }
+    },
+    onError: (error) => {
+      console.log("Send message error:", error);
     },
   });
 
   useEffect(() => {
-    if (productMessage && productName && productPrice && !hasInjectedProduct.current && uid && id && isChatReady) {
-      hasInjectedProduct.current = true;
+    if (productMessage && productName && productPrice && !hasInjectedProduct.current && uid && id) {
+      const waitForInit = () => {
+        if (chatInitDone.current || !storeId) {
+          hasInjectedProduct.current = true;
 
-      if (productImage && productName && productPrice) {
-        setProductCard({ image: productImage, name: productName, price: productPrice });
-      }
+          if (productImage && productName && productPrice) {
+            setProductCard({ image: productImage, name: productName, price: productPrice });
+          }
 
-      console.log("Sending product message after chat ready:", id);
-      sendMessageMutate(productMessage);
+          console.log("Sending product message:", id);
+          sendMessageMutate(productMessage);
 
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 300);
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 300);
+        } else {
+          setTimeout(waitForInit, 200);
+        }
+      };
+      waitForInit();
     }
-  }, [productMessage, productImage, productName, productPrice, uid, id, isChatReady, sendMessageMutate]);
+  }, [productMessage, productImage, productName, productPrice, uid, id, storeId, sendMessageMutate]);
 
   const handleSend = useCallback(() => {
     if (!messageText.trim()) return;
@@ -455,8 +490,9 @@ export default function ChatDetailScreen() {
       timestamp: now,
       isSent: true,
       isRead: false,
+      isOptimistic: true,
     };
-    setLocalMessages((prev) => [...prev, optimisticMsg]);
+    setOptimisticMessages((prev) => [...prev, optimisticMsg]);
     setMessageText("");
 
     sendMessageMutate(text);
@@ -553,14 +589,14 @@ export default function ChatDetailScreen() {
         enabled={Platform.OS !== "web"}
       >
         <View style={styles.chatArea}>
-          {isLoadingMessages && localMessages.length === 0 ? (
+          {isLoadingMessages && mergedMessages.length === 0 ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color={Colors.primary} />
             </View>
           ) : (
             <FlatList
               ref={flatListRef}
-              data={localMessages}
+              data={mergedMessages}
               keyExtractor={(item, index) => `${item.id}-${index}`}
               renderItem={renderMessage}
               contentContainerStyle={styles.messagesList}

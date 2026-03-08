@@ -608,12 +608,20 @@ export async function sendChatMessage(chatId: string, message: {
       if (chatSnap.exists()) {
         const chatData = chatSnap.data();
 
-        await updateDoc(chatRef, {
+        const updatePayload: Record<string, any> = {
           lastMessage: message.text,
           lastMessageTime: timeStr,
           lastMessageTimestamp: serverTimestamp(),
           updatedAt: serverTimestamp(),
-        });
+        };
+
+        const hiddenBy = chatData.hiddenBy as string[] | undefined;
+        if (hiddenBy && hiddenBy.length > 0) {
+          updatePayload.hiddenBy = [];
+          console.log("sendChatMessage: clearing hiddenBy for chat:", chatId);
+        }
+
+        await updateDoc(chatRef, updatePayload);
 
         const participants = (chatData.participants as string[]) ?? [];
         const recipientId = participants.find((p) => p !== message.senderId);
