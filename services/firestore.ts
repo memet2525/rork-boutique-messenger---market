@@ -483,15 +483,41 @@ export async function getOrCreateChat(params: {
 
     const chatRef = doc(db, "chats", params.chatId);
     let chatSnap: any = null;
+    let readPermissionDenied = false;
     try {
       chatSnap = await getDoc(chatRef);
     } catch (readErr: any) {
-      console.log("Chat read failed (may not exist yet):", readErr?.code, readErr?.message);
+      console.log("Chat read failed:", readErr?.code, readErr?.message);
+      if (readErr?.code === "permission-denied") {
+        readPermissionDenied = true;
+      }
       chatSnap = null;
     }
+
     if (chatSnap && chatSnap.exists()) {
       console.log("Chat already exists:", params.chatId);
       return { id: chatSnap.id, ...chatSnap.data() } as FirestoreChat;
+    }
+
+    if (readPermissionDenied) {
+      console.log("Chat doc exists but user not participant, returning minimal chat:", params.chatId);
+      return {
+        id: params.chatId,
+        participants: [params.userId, params.storeOwnerId],
+        storeId: params.storeId,
+        storeName: params.storeName || "Mağaza",
+        storeAvatar: params.storeAvatar || "",
+        storeOwnerId: params.storeOwnerId,
+        customerId: params.userId,
+        customerName: params.customerName || "Müşteri",
+        customerAvatar: params.customerAvatar || "",
+        lastMessage: "",
+        lastMessageTime: "",
+        lastMessageTimestamp: null,
+        isOnline: true,
+        createdAt: null,
+        updatedAt: null,
+      } as FirestoreChat;
     }
 
     const uniqueParticipants = [params.userId, params.storeOwnerId];
