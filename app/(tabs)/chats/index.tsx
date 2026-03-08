@@ -23,7 +23,6 @@ import {
   X,
   Search,
   Store,
-  FlaskConical,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -31,19 +30,25 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
 import { useUser } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
-import { getUserChats, FirestoreChat, BUTIKBIZ_ADMIN_ID, BUTIKBIZ_NAME, BUTIKBIZ_AVATAR, sendAdminChatMessage, createTestChatBetweenStores, getFirestoreStores, getChatId, getOrCreateChat, hideChatForUser, getTypingStatus } from "@/services/firestore";
+import { getUserChats, FirestoreChat, BUTIKBIZ_ADMIN_ID, BUTIKBIZ_NAME, BUTIKBIZ_AVATAR, sendAdminChatMessage, getFirestoreStores, getChatId, getOrCreateChat, hideChatForUser, subscribeToTypingStatus, subscribeToUserChats } from "@/services/firestore";
 import { playNotificationSound } from "@/services/notificationSound";
 
 function ChatItem({ chat, onPress, onLongPress, currentUid }: { chat: FirestoreChat; onPress: () => void; onLongPress: () => void; currentUid: string }) {
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
+  const [isOtherTyping, setIsOtherTyping] = useState<boolean>(false);
 
-  const typingQuery = useQuery({
-    queryKey: ["typingStatus", chat.id, currentUid],
-    queryFn: () => getTypingStatus(chat.id, currentUid),
-    enabled: !!currentUid && chat.storeOwnerId !== BUTIKBIZ_ADMIN_ID,
-    refetchInterval: 3000,
-  });
-  const isOtherTyping = typingQuery.data ?? false;
+  useEffect(() => {
+    if (!currentUid || chat.storeOwnerId === BUTIKBIZ_ADMIN_ID) {
+      setIsOtherTyping(false);
+      return;
+    }
+
+    const unsubscribe = subscribeToTypingStatus(chat.id, currentUid, (nextTypingStatus) => {
+      setIsOtherTyping(nextTypingStatus);
+    });
+
+    return unsubscribe;
+  }, [chat.id, chat.storeOwnerId, currentUid]);
 
   const handlePressIn = useCallback(() => {
     Animated.timing(scaleAnim, {
@@ -151,21 +156,7 @@ export default function ChatsScreen() {
   const [showStorePicker, setShowStorePicker] = useState<boolean>(false);
   const [storeSearch, setStoreSearch] = useState<string>("");
   const [chatToRemove, setChatToRemove] = useState<FirestoreChat | null>(null);
-
-  const testChatMutation = useMutation({
-    mutationFn: () => createTestChatBetweenStores(),
-    onSuccess: (chatId) => {
-      if (chatId) {
-        queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
-        showAlert("Test Sohbet", "İki mağaza arasında test sohbeti oluşturuldu! Sohbet listenizde görünecek.");
-      } else {
-        showAlert("Hata", "Test sohbeti oluşturulamadı. En az 2 mağaza olmalı.");
-      }
-    },
-    onError: () => {
-      showAlert("Hata", "Test sohbeti oluşturulurken bir hata oluştu.");
-    },
-  });
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   const storesQuery = useQuery({
     queryKey: ["firestoreStores"],
@@ -205,7 +196,7 @@ export default function ChatsScreen() {
     onSuccess: ({ chatId, store, storeOwnerId }) => {
       setShowStorePicker(false);
       setStoreSearch("");
-      queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+      void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
       router.push({
         pathname: "/chat/[id]" as RelativePathString,
         params: {
@@ -223,24 +214,6 @@ export default function ChatsScreen() {
     },
   });
 
-  const handleStartChat = useCallback(() => {
-    if (!isLoggedIn) {
-      showAlert(
-        "Üye Olun",
-        "Sohbet başlatabilmek için üye olmanız gerekmektedir.",
-        [
-          { text: "Vazgeç", style: "cancel" },
-          { text: "Giriş Yap / Üye Ol", onPress: () => router.push("/login" as any) },
-        ]
-      );
-      return;
-    }
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    setShowStorePicker(true);
-  }, [isLoggedIn, showAlert, router]);
-
   const isStoreOwner = profile.isStore;
   const subActive = isSubscriptionActive();
   const trialExp = isTrialExpired();
@@ -250,18 +223,45 @@ export default function ChatsScreen() {
     queryKey: ["userChats", uid],
     queryFn: () => getUserChats(uid!),
     enabled: !!uid && isLoggedIn,
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
   });
 
   useFocusEffect(
     useCallback(() => {
       if (uid && isLoggedIn) {
         console.log("Chats screen focused, refetching chats for:", uid);
-        queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+        void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
       }
     }, [uid, isLoggedIn, queryClient])
   );
+
+  useEffect(() => {
+    if (!uid || !isLoggedIn) {
+      return;
+    }
+
+    const unsubscribe = subscribeToUserChats(uid, () => {
+      console.log("Chats screen live update triggered for uid:", uid);
+      void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+    });
+
+    return unsubscribe;
+  }, [uid, isLoggedIn, queryClient]);
+
+  const handleRefresh = useCallback(async () => {
+    if (!uid) {
+      return;
+    }
+
+    console.log("Chats screen manual refresh started for uid:", uid);
+    setIsRefreshing(true);
+
+    try {
+      await queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+    } finally {
+      setIsRefreshing(false);
+      console.log("Chats screen manual refresh finished for uid:", uid);
+    }
+  }, [uid, queryClient]);
 
   const hideChatMutation = useMutation({
     mutationFn: async (chat: FirestoreChat) => {
@@ -271,9 +271,9 @@ export default function ChatsScreen() {
     },
     onSuccess: () => {
       setChatToRemove(null);
-      queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+      void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     },
     onError: () => {
@@ -284,7 +284,7 @@ export default function ChatsScreen() {
 
   const handleChatLongPress = useCallback((chat: FirestoreChat) => {
     if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     setChatToRemove(chat);
   }, []);
@@ -324,9 +324,9 @@ export default function ChatsScreen() {
       return;
     }
     if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    updateProfile({ aiAutoReplyEnabled: !profile.aiAutoReplyEnabled });
+    void updateProfile({ aiAutoReplyEnabled: !profile.aiAutoReplyEnabled });
     showAlert(
       profile.aiAutoReplyEnabled ? "AI Yanit Kapatildi" : "AI Yanit Acildi",
       profile.aiAutoReplyEnabled
@@ -369,7 +369,7 @@ export default function ChatsScreen() {
         )
           .then(() => {
             console.log("Welcome chat created successfully");
-            queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+            void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
           })
           .catch((err) => console.log("Welcome chat error:", err));
       }
@@ -385,7 +385,7 @@ export default function ChatsScreen() {
         for (const chat of chatsList) {
           const prevMsg = prevMap[chat.id];
           if (prevMsg !== undefined && chat.lastMessage && chat.lastMessage !== prevMsg && (chat.unreadCount ?? 0) > 0) {
-            playNotificationSound();
+            void playNotificationSound();
             console.log("New incoming message in chat list, playing sound for chat:", chat.id);
             break;
           }
@@ -481,10 +481,8 @@ export default function ChatsScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
-              refreshing={chatsQuery.isRefetching}
-              onRefresh={() => {
-                queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
-              }}
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
               tintColor={Colors.primary}
               colors={[Colors.primary]}
             />

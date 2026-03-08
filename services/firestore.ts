@@ -10,6 +10,8 @@ import {
   query,
   where,
   arrayUnion,
+  onSnapshot,
+  type Unsubscribe,
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -679,6 +681,15 @@ export async function getUnreadMessageCount(userId: string): Promise<number> {
   }
 }
 
+function buildLiveChatSignature(data: Record<string, any>): string {
+  const hiddenBy = Array.isArray(data.hiddenBy)
+    ? [...data.hiddenBy].sort((left, right) => String(left).localeCompare(String(right))).join("|")
+    : "";
+  const updatedAtSeconds = typeof data.updatedAt?.seconds === "number" ? data.updatedAt.seconds : 0;
+
+  return `${data.lastMessage ?? ""}::${data.lastMessageTime ?? ""}::${updatedAtSeconds}::${hiddenBy}`;
+}
+
 export async function getUserChats(userId: string): Promise<FirestoreChat[]> {
   try {
     console.log("getUserChats called for userId:", userId);
@@ -729,6 +740,91 @@ export async function getUserChats(userId: string): Promise<FirestoreChat[]> {
     console.log("Error loading user chats:", error?.code, error?.message, error);
     return [];
   }
+}
+
+export function subscribeToUserChats(userId: string, onChange: () => void): Unsubscribe {
+  const chatsRef = query(
+    collection(db, "chats"),
+    where("participants", "array-contains", userId)
+  );
+  let previousSignatures: Record<string, string> | null = null;
+
+  console.log("subscribeToUserChats: starting listener for userId:", userId);
+
+  return onSnapshot(
+    chatsRef,
+    (snapshot) => {
+      const nextSignatures: Record<string, string> = {};
+
+      snapshot.docs.forEach((chatDoc) => {
+        nextSignatures[chatDoc.id] = buildLiveChatSignature(chatDoc.data() as Record<string, any>);
+      });
+
+      if (previousSignatures === null) {
+        previousSignatures = nextSignatures;
+        console.log("subscribeToUserChats: initial snapshot size:", snapshot.size, "userId:", userId);
+        return;
+      }
+
+      const previousIds = Object.keys(previousSignatures);
+      const nextIds = Object.keys(nextSignatures);
+      const hasRelevantChange = previousIds.length !== nextIds.length
+        || nextIds.some((chatId) => previousSignatures?.[chatId] !== nextSignatures[chatId])
+        || previousIds.some((chatId) => !(chatId in nextSignatures));
+
+      previousSignatures = nextSignatures;
+
+      if (!hasRelevantChange) {
+        console.log("subscribeToUserChats: ignored non-list update for userId:", userId);
+        return;
+      }
+
+      console.log("subscribeToUserChats: relevant change detected for userId:", userId);
+      onChange();
+    },
+    (error) => {
+      console.log("subscribeToUserChats: listener error:", error);
+    }
+  );
+}
+
+export function subscribeToTypingStatus(
+  chatId: string,
+  currentUserId: string,
+  onChange: (isTyping: boolean) => void
+): Unsubscribe {
+  const chatRef = doc(db, "chats", chatId);
+  console.log("subscribeToTypingStatus: starting listener for chat:", chatId, "currentUserId:", currentUserId);
+
+  return onSnapshot(
+    chatRef,
+    (chatSnap) => {
+      if (!chatSnap.exists()) {
+        onChange(false);
+        return;
+      }
+
+      const data = chatSnap.data();
+      const participants = (data.participants as string[]) ?? [];
+      const otherUserId = participants.find((participantId) => participantId !== currentUserId);
+
+      if (!otherUserId) {
+        onChange(false);
+        return;
+      }
+
+      const typingTimestamp = data[`typing_${otherUserId}`] as number | undefined;
+      const isTyping = typeof typingTimestamp === "number"
+        && typingTimestamp > 0
+        && Date.now() - typingTimestamp < 10000;
+
+      onChange(isTyping);
+    },
+    (error) => {
+      console.log("subscribeToTypingStatus: listener error:", error);
+      onChange(false);
+    }
+  );
 }
 
 export async function hideChatForUser(chatId: string, userId: string): Promise<void> {
