@@ -11,34 +11,36 @@ service firebase.storage {
         && request.auth.token.email == "atlaspelet.com@gmail.com";
     }
 
+    function isDelete() {
+      return request.resource == null;
+    }
+
     function hasImageContentType() {
       return request.resource != null
         && request.resource.contentType != null
         && request.resource.contentType.matches('image/.*');
     }
 
-    function isUnderSizeLimit(maxBytes) {
+    function isWithinSizeLimit(maxBytes) {
       return request.resource != null
         && request.resource.size != null
-        && request.resource.size < maxBytes;
+        && request.resource.size <= maxBytes;
     }
 
-    function isDelete() {
-      return request.resource == null;
+    function isValidImageWrite(maxBytes) {
+      return isDelete()
+        || (
+          hasImageContentType()
+          && isWithinSizeLimit(maxBytes)
+        );
     }
 
-    function isValidImageUpload(maxBytes) {
-      return request.resource != null
-        && hasImageContentType()
-        && isUnderSizeLimit(maxBytes);
-    }
-
-    function isOwnAvatarFile(fileName) {
+    function isOwnAvatar(fileName) {
       return isSignedIn()
-        && fileName.matches('^' + request.auth.uid + '_.*');
+        && fileName.matches('^' + request.auth.uid + '_.*$');
     }
 
-    function canWriteStoreFolder(storeId) {
+    function canManageStoreFolder(storeId) {
       return isSignedIn()
         && (
           isSuperAdmin()
@@ -48,41 +50,26 @@ service firebase.storage {
 
     match /avatars/{fileName} {
       allow read: if true;
-      allow write: if (
-          isSuperAdmin()
-          || isOwnAvatarFile(fileName)
-        )
-        && (
-          isDelete()
-          || isValidImageUpload(5 * 1024 * 1024)
-        );
+      allow write: if (isSuperAdmin() || isOwnAvatar(fileName))
+        && isValidImageWrite(5 * 1024 * 1024);
     }
 
-    match /products/{storeId}/{allPaths=**} {
+    match /products/{storeId}/{fileName} {
       allow read: if true;
-      allow write: if canWriteStoreFolder(storeId)
-        && (
-          isDelete()
-          || isValidImageUpload(10 * 1024 * 1024)
-        );
+      allow write: if canManageStoreFolder(storeId)
+        && isValidImageWrite(10 * 1024 * 1024);
     }
 
     match /stores/{storeId}/{allPaths=**} {
       allow read: if true;
-      allow write: if canWriteStoreFolder(storeId)
-        && (
-          isDelete()
-          || isValidImageUpload(10 * 1024 * 1024)
-        );
+      allow write: if canManageStoreFolder(storeId)
+        && isValidImageWrite(10 * 1024 * 1024);
     }
 
     match /chats/{allPaths=**} {
       allow read: if isSignedIn();
       allow write: if isSignedIn()
-        && (
-          isDelete()
-          || isValidImageUpload(10 * 1024 * 1024)
-        );
+        && isValidImageWrite(10 * 1024 * 1024);
     }
 
     match /{allPaths=**} {
