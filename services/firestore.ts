@@ -14,6 +14,11 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { auth, db } from "@/config/firebase";
+import {
+  deleteAdminStoreRegistry,
+  syncAdminMemberRegistry,
+  syncAdminStoreRegistry,
+} from "@/services/adminRegistry";
 
 export async function getUserProfile(uid: string): Promise<Record<string, any> | null> {
   const cachedProfile = await readCachedUserProfile(uid);
@@ -187,6 +192,15 @@ export async function saveUserProfile(uid: string, data: Record<string, any>): P
       }, { merge: true });
     }
 
+    await syncAdminMemberRegistry(
+      uid,
+      {
+        ...(existingProfile.exists() ? existingProfile.data() : {}),
+        ...cleanData,
+      },
+      { useFallbacks: true }
+    );
+
     console.log("saveUserProfile: SUCCESS for uid:", uid);
   } catch (error: any) {
     if (isPermissionDeniedError(error)) {
@@ -263,6 +277,32 @@ export async function saveStore(storeId: string, data: Record<string, any>): Pro
       }, { merge: true });
     }
 
+    const mergedStoreRecord = {
+      ...(existingStore.exists() ? existingStore.data() : {}),
+      ...cleanData,
+    };
+
+    await syncAdminStoreRegistry(storeId, mergedStoreRecord, { useFallbacks: true });
+    await syncAdminMemberRegistry(
+      storeId,
+      {
+        isStore: true,
+        accountStatus: mergedStoreRecord.adminStatus,
+        name: mergedStoreRecord.ownerName ?? mergedStoreRecord.name,
+        email: mergedStoreRecord.email,
+        phone: mergedStoreRecord.phone,
+        avatar: mergedStoreRecord.avatar,
+        storeName: mergedStoreRecord.name,
+        storeCategory: mergedStoreRecord.category,
+        storeCity: mergedStoreRecord.city,
+        storePhone: mergedStoreRecord.phone,
+        subscriptionPlan: mergedStoreRecord.subscriptionPlan,
+        subscriptionStatus: mergedStoreRecord.subscriptionStatus,
+        createdAt: mergedStoreRecord.createdAt,
+      },
+      { useFallbacks: true }
+    );
+
     console.log("Store saved to Firestore:", storeId);
   } catch (error) {
     const writeError = normalizeFirestoreWriteError(error, "Mağaza kaydedilemedi. Lütfen tekrar deneyin.");
@@ -274,6 +314,7 @@ export async function saveStore(storeId: string, data: Record<string, any>): Pro
 export async function deleteStore(storeId: string): Promise<void> {
   try {
     await deleteDoc(doc(db, "stores", storeId));
+    await deleteAdminStoreRegistry(storeId);
     console.log("Store deleted from Firestore");
   } catch (error) {
     console.log("Error deleting store:", error);

@@ -157,6 +157,39 @@ interface SaveProfileMutationInput {
   profilePatch: Partial<UserProfile>;
 }
 
+function buildStorePayload(ownerId: string, nextProfile: UserProfile): Record<string, unknown> {
+  const displayName = nextProfile.name.trim() || `${nextProfile.firstName} ${nextProfile.lastName}`.trim() || nextProfile.storeName.trim();
+
+  return {
+    name: nextProfile.storeName,
+    slug: slugify(nextProfile.storeName),
+    avatar: nextProfile.avatar,
+    description: nextProfile.storeDescription || "",
+    category: nextProfile.storeCategory || "Diger",
+    city: nextProfile.storeCity || "",
+    phone: nextProfile.storePhone || nextProfile.phone || "",
+    rating: 5.0,
+    reviewCount: 0,
+    isOnline: true,
+    ownerId,
+    ownerName: displayName,
+    email: nextProfile.email || "",
+    subscriptionPlan: nextProfile.subscriptionPlan,
+    subscriptionStatus: nextProfile.subscriptionStatus,
+    planStartDate: nextProfile.subscriptionStartDate || nextProfile.trialStartDate || "",
+    planEndDate: nextProfile.subscriptionEndDate || nextProfile.trialEndDate || "",
+    products: (nextProfile.storeProducts ?? []).map((sp) => ({
+      id: sp.id,
+      name: sp.name,
+      price: sp.price,
+      image: sp.image,
+      images: sp.images ?? [],
+      description: sp.description,
+      features: sp.features,
+    })),
+  };
+}
+
 export const [UserProvider, useUser] = createContextHook(() => {
   const queryClient = useQueryClient();
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
@@ -247,31 +280,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
       }
 
       if (nextProfile.isStore && nextProfile.storeName) {
-        const storeSlug = slugify(nextProfile.storeName);
-        await saveStore(uid, {
-          name: nextProfile.storeName,
-          slug: storeSlug,
-          avatar: nextProfile.avatar,
-          description: nextProfile.storeDescription || "",
-          category: nextProfile.storeCategory || "Diger",
-          city: nextProfile.storeCity || "",
-          phone: nextProfile.storePhone || "",
-          rating: 5.0,
-          reviewCount: 0,
-          isOnline: true,
-          ownerId: uid,
-          subscriptionPlan: nextProfile.subscriptionPlan,
-          subscriptionStatus: nextProfile.subscriptionStatus,
-          products: (nextProfile.storeProducts ?? []).map((sp) => ({
-            id: sp.id,
-            name: sp.name,
-            price: sp.price,
-            image: sp.image,
-            images: sp.images ?? [],
-            description: sp.description,
-            features: sp.features,
-          })),
-        });
+        await saveStore(uid, buildStorePayload(uid, nextProfile));
       } else if (!nextProfile.isStore) {
         await deleteStore(uid);
       }
@@ -284,6 +293,10 @@ export const [UserProvider, useUser] = createContextHook(() => {
         queryClient.setQueryData(["userProfile", uid], savedProfile);
       }
       void queryClient.invalidateQueries({ queryKey: ["firestoreStores"] });
+      void queryClient.invalidateQueries({ queryKey: ["adminAllUsers"] });
+      void queryClient.invalidateQueries({ queryKey: ["adminAllStores"] });
+      void queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] });
+      void queryClient.invalidateQueries({ queryKey: ["adminRegistryStores"] });
     },
     onError: (error) => {
       console.error("saveMutation ERROR:", error);
@@ -304,6 +317,76 @@ export const [UserProvider, useUser] = createContextHook(() => {
       profileRef.current = profileQuery.data;
     }
   }, [profileQuery.data]);
+
+  const lastReconciledSignatureRef = useRef<string>("");
+
+  useEffect(() => {
+    if (!uid || !profileQuery.data || authLoading) {
+      return;
+    }
+
+    const authEmail = auth.currentUser?.email ?? "";
+    const nextProfile = { ...DEFAULT_PROFILE, ...profileQuery.data } as UserProfile;
+    const resolvedName = nextProfile.name.trim()
+      || `${nextProfile.firstName} ${nextProfile.lastName}`.trim()
+      || (authEmail ? authEmail.split("@")[0] : "");
+    const resolvedEmail = nextProfile.email || authEmail;
+    const reconciliationSignature = JSON.stringify({
+      uid,
+      resolvedName,
+      resolvedEmail,
+      isStore: nextProfile.isStore,
+      storeName: nextProfile.storeName,
+      storeCategory: nextProfile.storeCategory,
+      storeCity: nextProfile.storeCity,
+      storePhone: nextProfile.storePhone,
+      subscriptionPlan: nextProfile.subscriptionPlan,
+      subscriptionStatus: nextProfile.subscriptionStatus,
+      storeProductsCount: nextProfile.storeProducts.length,
+    });
+
+    if (lastReconciledSignatureRef.current === reconciliationSignature) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    void (async () => {
+      try {
+        const profilePatch: Partial<UserProfile> = {};
+
+        if (resolvedName && nextProfile.name !== resolvedName) {
+          profilePatch.name = resolvedName;
+        }
+
+        if (resolvedEmail && nextProfile.email !== resolvedEmail) {
+          profilePatch.email = resolvedEmail;
+        }
+
+        if (Object.keys(profilePatch).length > 0) {
+          await saveUserProfile(uid, profilePatch as Record<string, unknown>);
+        }
+
+        if (nextProfile.isStore && nextProfile.storeName.trim().length > 0) {
+          const syncedProfile = {
+            ...nextProfile,
+            ...profilePatch,
+          } as UserProfile;
+          await saveStore(uid, buildStorePayload(uid, syncedProfile));
+        }
+
+        if (!isCancelled) {
+          lastReconciledSignatureRef.current = reconciliationSignature;
+        }
+      } catch (error) {
+        console.log("Profile reconciliation error:", error);
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [uid, profileQuery.data, authLoading]);
 
   const updateProfile = useCallback(
     async (updates: Partial<UserProfile>): Promise<void> => {
@@ -520,6 +603,10 @@ export const [UserProvider, useUser] = createContextHook(() => {
         setProfile(newProfile);
         queryClient.setQueryData(["userProfile", userUid], newProfile);
         await saveUserProfile(userUid, newProfile);
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["adminAllUsers"] }),
+          queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] }),
+        ]);
 
         try {
           await sendAdminChatMessage(
@@ -554,8 +641,41 @@ export const [UserProvider, useUser] = createContextHook(() => {
           merged.favorites = Array.isArray(merged.favorites) ? merged.favorites : [];
           merged.favoriteSnapshots = Array.isArray(merged.favoriteSnapshots) ? merged.favoriteSnapshots : [];
           merged.systemNotifications = Array.isArray(merged.systemNotifications) ? merged.systemNotifications : [];
-          setProfile(merged);
-          queryClient.setQueryData(["userProfile", userUid], merged);
+
+          const profilePatch: Partial<UserProfile> = {};
+          if (!merged.email && credential.user.email) {
+            profilePatch.email = credential.user.email;
+          }
+          if (!merged.name.trim()) {
+            profilePatch.name = credential.user.email?.split("@")[0] ?? email.trim().split("@")[0] ?? "Kullanici";
+          }
+
+          const syncedProfile = {
+            ...merged,
+            ...profilePatch,
+          } as UserProfile;
+
+          if (Object.keys(profilePatch).length > 0) {
+            await saveUserProfile(userUid, profilePatch as Record<string, unknown>);
+          }
+
+          if (syncedProfile.isStore && syncedProfile.storeName.trim().length > 0) {
+            await saveStore(userUid, buildStorePayload(userUid, syncedProfile));
+          }
+
+          setProfile(syncedProfile);
+          queryClient.setQueryData(["userProfile", userUid], syncedProfile);
+        } else {
+          const fallbackName = credential.user.email?.split("@")[0] ?? email.trim().split("@")[0] ?? "Kullanici";
+          const fallbackProfile: UserProfile = {
+            ...DEFAULT_PROFILE,
+            name: fallbackName,
+            email: credential.user.email ?? email.trim(),
+          };
+
+          setProfile(fallbackProfile);
+          queryClient.setQueryData(["userProfile", userUid], fallbackProfile);
+          await saveUserProfile(userUid, fallbackProfile);
         }
       } catch (error) {
         console.log("Login error:", error);

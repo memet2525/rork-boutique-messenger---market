@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import createContextHook from "@nkzw/create-context-hook";
 import {
@@ -14,6 +14,13 @@ import {
   updateStorePlanAdmin,
   verifyStorePaymentAdmin,
 } from "@/services/firestore";
+import {
+  backfillAdminRegistry,
+  getAdminRegistryMembers,
+  getAdminRegistryStores,
+  syncAdminMemberRegistry,
+  syncAdminStoreRegistry,
+} from "@/services/adminRegistry";
 
 export type PlanType = "monthly" | "yearly";
 export type MemberStatus = "active" | "passive";
@@ -163,6 +170,28 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     refetchInterval: 30000,
   });
 
+  const registryUsersQuery = useQuery({
+    queryKey: ["adminRegistryUsers"],
+    queryFn: async () => {
+      console.log("Admin: Loading admin registry users...");
+      const registryUsers = await getAdminRegistryMembers();
+      console.log("Admin: Loaded", registryUsers.length, "registry users");
+      return registryUsers;
+    },
+    refetchInterval: 30000,
+  });
+
+  const registryStoresQuery = useQuery({
+    queryKey: ["adminRegistryStores"],
+    queryFn: async () => {
+      console.log("Admin: Loading admin registry stores...");
+      const registryStores = await getAdminRegistryStores();
+      console.log("Admin: Loaded", registryStores.length, "registry stores");
+      return registryStores;
+    },
+    refetchInterval: 30000,
+  });
+
   const settingsQuery = useQuery({
     queryKey: ["adminSettings"],
     queryFn: async () => {
@@ -189,104 +218,160 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     },
   });
 
+  const hasTriggeredBackfillRef = useRef<boolean>(false);
+
   useEffect(() => {
-    if (realUsersQuery.data && realStoresQuery.data) {
-      const allUsers = realUsersQuery.data;
-      const allStores = realStoresQuery.data;
+    const sourceUsers = realUsersQuery.data ?? [];
+    const sourceStores = realStoresQuery.data ?? [];
+    const registryUsers = registryUsersQuery.data ?? [];
+    const registryStores = registryStoresQuery.data ?? [];
+    const hasSourceData = sourceUsers.length > 0 || sourceStores.length > 0;
+    const registryIsEmpty = registryUsers.length === 0 && registryStores.length === 0;
 
-      const storeMap = new Map<string, Record<string, any>>();
-      for (const store of allStores) {
-        const ownerId = store.ownerId || store.id;
-        storeMap.set(ownerId, store);
-      }
-
-      const storeMembers: StoreMember[] = [];
-      const customerMembers: CustomerMember[] = [];
-
-      for (const user of allUsers) {
-        const userId = user.uid || user.id;
-        const userName = user.name || `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Isimsiz";
-        const userPhone = user.phone || user.storePhone || "-";
-        const userAvatar = user.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop";
-        const userEmail = user.email || "";
-        const createdAtRaw = getFirestoreDate(user, "createdAt") || getFirestoreDate(user, "updatedAt") || "";
-        const accountStatus = user.accountStatus || "active";
-
-        if (user.isStore) {
-          const storeData = storeMap.get(userId);
-          const storeName = user.storeName || storeData?.name || userName;
-          const storeCategory = user.storeCategory || storeData?.category || "Diger";
-          const storeCity = user.storeCity || storeData?.city || "-";
-          const storeStatus = storeData?.adminStatus || accountStatus;
-
-          const planType = (user.subscriptionPlan === "yearly" ? "yearly" : "monthly") as PlanType;
-          const planStartDate = user.subscriptionStartDate || storeData?.planStartDate || "";
-          const planEndDate = user.subscriptionEndDate || storeData?.planEndDate || "";
-          const paymentVerified = storeData?.paymentVerified ?? (user.subscriptionStatus === "active");
-
-          storeMembers.push({
-            id: userId,
-            name: storeName,
-            ownerName: userName,
-            phone: userPhone,
-            avatar: storeData?.avatar || userAvatar,
-            category: storeCategory,
-            city: storeCity,
-            status: storeStatus === "passive" ? "passive" : "active",
-            planType,
-            planStartDate: formatDate(planStartDate),
-            planEndDate: formatDate(planEndDate),
-            createdAt: formatDate(createdAtRaw),
-            paymentVerified,
-            email: userEmail,
-          });
-        } else {
-          customerMembers.push({
-            id: userId,
-            name: userName,
-            phone: userPhone,
-            avatar: userAvatar,
-            status: accountStatus === "passive" ? "passive" : "active",
-            orderCount: user.orderCount || 0,
-            totalSpent: user.totalSpent || "0 TL",
-            createdAt: formatDate(createdAtRaw),
-            email: userEmail,
-            isStore: false,
-          });
-        }
-      }
-
-      for (const store of allStores) {
-        const ownerId = store.ownerId || store.id;
-        const alreadyAdded = storeMembers.some((s) => s.id === ownerId);
-        if (!alreadyAdded) {
-          const storeStatus = store.adminStatus || "active";
-          const planType = (store.subscriptionPlan === "yearly" ? "yearly" : "monthly") as PlanType;
-
-          storeMembers.push({
-            id: ownerId,
-            name: store.name || "Isimsiz Magaza",
-            ownerName: store.ownerName || store.name || "-",
-            phone: store.phone || "-",
-            avatar: store.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop",
-            category: store.category || "Diger",
-            city: store.city || "-",
-            status: storeStatus === "passive" ? "passive" : "active",
-            planType,
-            planStartDate: formatDate(store.planStartDate),
-            planEndDate: formatDate(store.planEndDate),
-            createdAt: formatDate(getFirestoreDate(store, "createdAt")),
-            paymentVerified: store.paymentVerified ?? false,
-            email: store.email || "",
-          });
-        }
-      }
-
-      console.log("Admin: Mapped", storeMembers.length, "stores,", customerMembers.length, "customers");
-      setStores(storeMembers);
-      setCustomers(customerMembers);
+    if (!hasSourceData || !registryIsEmpty || hasTriggeredBackfillRef.current) {
+      return;
     }
-  }, [realUsersQuery.data, realStoresQuery.data]);
+
+    hasTriggeredBackfillRef.current = true;
+
+    void backfillAdminRegistry()
+      .then((result) => {
+        console.log("Admin: Initial registry backfill completed", result);
+        void queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] });
+        void queryClient.invalidateQueries({ queryKey: ["adminRegistryStores"] });
+      })
+      .catch((error) => {
+        console.log("Admin: Initial registry backfill failed", error);
+      });
+  }, [realUsersQuery.data, realStoresQuery.data, registryUsersQuery.data, registryStoresQuery.data, queryClient]);
+
+  useEffect(() => {
+    const allUsers = realUsersQuery.data ?? [];
+    const allStores = realStoresQuery.data ?? [];
+    const registryUsers = registryUsersQuery.data ?? [];
+    const registryStores = registryStoresQuery.data ?? [];
+
+    const mergedUserMap = new Map<string, Record<string, any>>();
+    const mergedStoreMap = new Map<string, Record<string, any>>();
+
+    for (const user of allUsers) {
+      const userId = typeof user.uid === "string" ? user.uid : typeof user.id === "string" ? user.id : "";
+      if (!userId) continue;
+      mergedUserMap.set(userId, { ...(mergedUserMap.get(userId) ?? {}), ...user });
+    }
+
+    for (const registryUser of registryUsers) {
+      const userId = typeof registryUser.uid === "string"
+        ? registryUser.uid
+        : typeof registryUser.id === "string"
+          ? registryUser.id
+          : "";
+      if (!userId) continue;
+      mergedUserMap.set(userId, { ...(mergedUserMap.get(userId) ?? {}), ...registryUser });
+    }
+
+    for (const store of allStores) {
+      const ownerId = typeof store.ownerId === "string" ? store.ownerId : typeof store.id === "string" ? store.id : "";
+      if (!ownerId) continue;
+      mergedStoreMap.set(ownerId, { ...(mergedStoreMap.get(ownerId) ?? {}), ...store });
+    }
+
+    for (const registryStore of registryStores) {
+      const ownerId = typeof registryStore.ownerId === "string"
+        ? registryStore.ownerId
+        : typeof registryStore.id === "string"
+          ? registryStore.id
+          : "";
+      if (!ownerId) continue;
+      mergedStoreMap.set(ownerId, { ...(mergedStoreMap.get(ownerId) ?? {}), ...registryStore });
+    }
+
+    const storeMembers: StoreMember[] = [];
+    const customerMembers: CustomerMember[] = [];
+
+    for (const [userId, user] of mergedUserMap.entries()) {
+      const storeData = mergedStoreMap.get(userId);
+      const userName = user.name || `${user.firstName || ""} ${user.lastName || ""}`.trim() || storeData?.ownerName || user.storeName || "Isimsiz";
+      const userPhone = user.phone || user.storePhone || storeData?.phone || "-";
+      const userAvatar = user.avatar || storeData?.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop";
+      const userEmail = user.email || storeData?.email || "";
+      const createdAtRaw = getFirestoreDate(user, "createdAt") || getFirestoreDate(storeData ?? {}, "createdAt") || getFirestoreDate(user, "updatedAt") || "";
+      const accountStatus = (storeData?.adminStatus || user.accountStatus || "active") as MemberStatus;
+      const isStoreAccount = Boolean(user.isStore || storeData);
+
+      if (isStoreAccount) {
+        const storeName = user.storeName || storeData?.name || userName;
+        const storeCategory = user.storeCategory || storeData?.category || "Diger";
+        const storeCity = user.storeCity || storeData?.city || "-";
+        const planSource = user.subscriptionPlan || storeData?.subscriptionPlan || "monthly";
+        const planType = (planSource === "yearly" ? "yearly" : "monthly") as PlanType;
+        const planStartDate = user.subscriptionStartDate || storeData?.planStartDate || user.trialStartDate || "";
+        const planEndDate = user.subscriptionEndDate || storeData?.planEndDate || user.trialEndDate || "";
+        const paymentVerified = storeData?.paymentVerified ?? (user.subscriptionStatus === "active" && planSource !== "trial");
+
+        storeMembers.push({
+          id: userId,
+          name: storeName,
+          ownerName: userName,
+          phone: userPhone,
+          avatar: storeData?.avatar || userAvatar,
+          category: storeCategory,
+          city: storeCity,
+          status: accountStatus === "passive" ? "passive" : "active",
+          planType,
+          planStartDate: formatDate(planStartDate),
+          planEndDate: formatDate(planEndDate),
+          createdAt: formatDate(createdAtRaw),
+          paymentVerified,
+          email: userEmail,
+        });
+      } else {
+        customerMembers.push({
+          id: userId,
+          name: userName,
+          phone: userPhone,
+          avatar: userAvatar,
+          status: accountStatus === "passive" ? "passive" : "active",
+          orderCount: user.orderCount || 0,
+          totalSpent: user.totalSpent || "0 TL",
+          createdAt: formatDate(createdAtRaw),
+          email: userEmail,
+          isStore: false,
+        });
+      }
+    }
+
+    for (const [ownerId, store] of mergedStoreMap.entries()) {
+      const alreadyAdded = storeMembers.some((member) => member.id === ownerId);
+      if (alreadyAdded) {
+        continue;
+      }
+
+      const storeStatus = store.adminStatus || store.accountStatus || "active";
+      const planType = (store.subscriptionPlan === "yearly" ? "yearly" : "monthly") as PlanType;
+
+      storeMembers.push({
+        id: ownerId,
+        name: store.name || "Isimsiz Magaza",
+        ownerName: store.ownerName || store.name || "-",
+        phone: store.phone || store.storePhone || "-",
+        avatar: store.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop",
+        category: store.category || store.storeCategory || "Diger",
+        city: store.city || store.storeCity || "-",
+        status: storeStatus === "passive" ? "passive" : "active",
+        planType,
+        planStartDate: formatDate(store.planStartDate || store.subscriptionStartDate || store.trialStartDate || ""),
+        planEndDate: formatDate(store.planEndDate || store.subscriptionEndDate || store.trialEndDate || ""),
+        createdAt: formatDate(getFirestoreDate(store, "createdAt") || getFirestoreDate(store, "updatedAt")),
+        paymentVerified: store.paymentVerified ?? false,
+        email: store.email || "",
+      });
+    }
+
+    console.log("Admin: Mapped", storeMembers.length, "stores,", customerMembers.length, "customers");
+    setStores(storeMembers);
+    setCustomers(customerMembers);
+  }, [realUsersQuery.data, realStoresQuery.data, registryUsersQuery.data, registryStoresQuery.data, queryClient]);
 
   useEffect(() => {
     if (settingsQuery.data) {
@@ -304,8 +389,14 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       );
       setStores(updated);
       try {
-        await updateUserStatus(storeId, newStatus);
-        void updateStoreStatusAdmin(storeId, newStatus);
+        await updateStoreStatusAdmin(storeId, newStatus);
+        await syncAdminStoreRegistry(storeId, { adminStatus: newStatus });
+        await syncAdminMemberRegistry(storeId, { accountStatus: newStatus, isStore: true });
+        try {
+          await updateUserStatus(storeId, newStatus);
+        } catch (userStatusError) {
+          console.log("Admin: store user status sync skipped:", userStatusError);
+        }
         console.log("Store status toggled:", storeId, "->", newStatus);
       } catch (error) {
         console.log("Error toggling store status:", error);
@@ -350,6 +441,20 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
           subscriptionStatus: "active",
         });
         await updateStoreStatusAdmin(storeId, "active");
+        await syncAdminStoreRegistry(storeId, {
+          adminStatus: "active",
+          subscriptionPlan: planType,
+          subscriptionStatus: "active",
+          planStartDate: startStr,
+          planEndDate: endStr,
+          paymentVerified: false,
+        });
+        await syncAdminMemberRegistry(storeId, {
+          isStore: true,
+          accountStatus: "active",
+          subscriptionPlan: planType,
+          subscriptionStatus: "active",
+        });
         console.log("Store plan updated:", storeId, planType);
       } catch (error) {
         console.log("Error updating store plan:", error);
@@ -367,6 +472,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       setStores(updated);
       try {
         await verifyStorePaymentAdmin(storeId);
+        await syncAdminStoreRegistry(storeId, { paymentVerified: true });
         console.log("Payment verified:", storeId);
       } catch (error) {
         console.log("Error verifying payment:", error);
@@ -387,6 +493,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       setCustomers(updated);
       try {
         await updateUserStatus(customerId, newStatus);
+        await syncAdminMemberRegistry(customerId, { accountStatus: newStatus, isStore: false });
         console.log("Customer status toggled:", customerId, "->", newStatus);
       } catch (error) {
         console.log("Error toggling customer status:", error);
@@ -406,8 +513,17 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
   );
 
   const refreshData = useCallback(() => {
+    void backfillAdminRegistry()
+      .then((result) => {
+        console.log("Admin: Manual registry backfill completed", result);
+      })
+      .catch((error) => {
+        console.log("Admin: Manual registry backfill failed", error);
+      });
     void queryClient.invalidateQueries({ queryKey: ["adminAllUsers"] });
     void queryClient.invalidateQueries({ queryKey: ["adminAllStores"] });
+    void queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] });
+    void queryClient.invalidateQueries({ queryKey: ["adminRegistryStores"] });
     console.log("Admin: Data refresh triggered");
   }, [queryClient]);
 
@@ -560,12 +676,13 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     activeCustomerCount,
     unpaidStores,
     totalUserCount,
-    isLoading: realUsersQuery.isLoading || realStoresQuery.isLoading,
+    isLoading: realUsersQuery.isLoading || realStoresQuery.isLoading || registryUsersQuery.isLoading || registryStoresQuery.isLoading,
   }), [
     stores, customers, settings, toggleStoreStatus, updateStorePlan,
     verifyPayment, toggleCustomerStatus, updateSettings, refreshData,
     sendMessageToAll, sendMessageToStoreOwners, sendMessageToCustomers,
     activeStoreCount, activeCustomerCount, unpaidStores, totalUserCount,
     realUsersQuery.isLoading, realStoresQuery.isLoading,
+    registryUsersQuery.isLoading, registryStoresQuery.isLoading,
   ]);
 });
