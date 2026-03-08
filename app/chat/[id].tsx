@@ -53,7 +53,7 @@ interface ProductCard {
   price: string;
 }
 
-function MessageBubble({ message, avatar }: { message: DisplayMessage; avatar?: string }) {
+function MessageBubble({ message }: { message: DisplayMessage }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -72,9 +72,6 @@ function MessageBubble({ message, avatar }: { message: DisplayMessage; avatar?: 
         { opacity: fadeAnim },
       ]}
     >
-      {!message.isSent && (
-        <Image source={{ uri: avatar }} style={styles.messageAvatar} />
-      )}
       <View style={[styles.bubbleContainer, message.isSent ? styles.sentContainer : styles.receivedContainer]}>
         <View
           style={[
@@ -554,7 +551,7 @@ export default function ChatDetailScreen() {
     if (item.isProductCard && productCard) {
       return <ProductMessageBubble product={productCard} timestamp={item.timestamp} />;
     }
-    return <MessageBubble message={item} avatar={resolvedStoreAvatar} />;
+    return <MessageBubble message={item} />;
   };
 
   return (
