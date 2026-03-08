@@ -22,13 +22,13 @@ import Colors from "@/constants/colors";
 import { stores } from "@/mocks/stores";
 import { useUser } from "@/contexts/UserContext";
 import {
-  getChatMessages,
   sendChatMessage,
   getOrCreateChat,
   clearChatMessages,
   markMessagesAsRead,
   setTypingStatus,
   getTypingStatus,
+  subscribeToChatMessages,
   FirestoreMessage,
   BUTIKBIZ_ADMIN_ID,
   BUTIKBIZ_NAME,
@@ -234,30 +234,37 @@ export default function ChatDetailScreen() {
   const resolvedStoreAvatar = isAdminChat ? BUTIKBIZ_AVATAR : (storeAvatar ?? "");
   const resolvedIsOnline = isOnline === "true";
 
-  const messagesQuery = useQuery({
-    queryKey: ["chatMessages", id],
-    queryFn: () => getChatMessages(id!),
-    enabled: !!id,
-    refetchInterval: 5000,
-  });
+  const [firestoreMessages, setFirestoreMessages] = useState<FirestoreMessage[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState<boolean>(true);
 
   useEffect(() => {
-    if (id && uid && messagesQuery.data && messagesQuery.data.length > 0) {
-      const hasUnread = messagesQuery.data.some(
+    if (!id) return;
+    setIsLoadingMessages(true);
+    const unsubscribe = subscribeToChatMessages(id, (messages) => {
+      setFirestoreMessages(messages);
+      setIsLoadingMessages(false);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (id && uid && firestoreMessages.length > 0) {
+      const hasUnread = firestoreMessages.some(
         (msg: FirestoreMessage) => msg.senderId !== uid && !msg.isRead
       );
       if (hasUnread) {
         void markMessagesAsRead(id, uid).then(() => {
-          void queryClient.invalidateQueries({ queryKey: ["chatMessages", id] });
           void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
         });
       }
     }
-  }, [id, uid, messagesQuery.data, queryClient]);
+  }, [id, uid, firestoreMessages, queryClient]);
 
   useEffect(() => {
-    if (messagesQuery.data && uid) {
-      const display: DisplayMessage[] = messagesQuery.data.map((msg: FirestoreMessage) => ({
+    if (firestoreMessages && uid) {
+      const display: DisplayMessage[] = firestoreMessages.map((msg: FirestoreMessage) => ({
         id: msg.id,
         text: msg.text,
         timestamp: msg.timestamp,
@@ -278,9 +285,9 @@ export default function ChatDetailScreen() {
       prevMessageCountRef.current = display.length;
 
       setLocalMessages(display);
-      console.log("Messages synced from Firestore:", display.length);
+      console.log("Messages synced from Firestore realtime:", display.length);
     }
-  }, [messagesQuery.data, uid]);
+  }, [firestoreMessages, uid]);
 
   useEffect(() => {
     if (id && uid && !chatInitialized.current) {
@@ -323,7 +330,6 @@ export default function ChatDetailScreen() {
       setLocalMessages([]);
       setProductCard(null);
       prevMessageCountRef.current = 0;
-      void queryClient.invalidateQueries({ queryKey: ["chatMessages", id] });
       void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
       setMenuVisible(false);
       console.log("Chat cleared successfully");
@@ -360,7 +366,6 @@ export default function ChatDetailScreen() {
       return sendChatMessage(id, { text, senderId: uid });
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["chatMessages", id] });
       void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
     },
   });
@@ -508,7 +513,7 @@ export default function ChatDetailScreen() {
         enabled={Platform.OS !== "web"}
       >
         <View style={styles.chatArea}>
-          {messagesQuery.isLoading && localMessages.length === 0 ? (
+          {isLoadingMessages && localMessages.length === 0 ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color={Colors.primary} />
             </View>

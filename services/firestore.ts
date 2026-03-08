@@ -661,6 +661,26 @@ export async function getChatMessages(chatId: string): Promise<FirestoreMessage[
   }
 }
 
+export function subscribeToChatMessages(
+  chatId: string,
+  callback: (messages: FirestoreMessage[]) => void
+): Unsubscribe {
+  const msgsRef = collection(db, "chats", chatId, "messages");
+  console.log("Subscribing to chat messages:", chatId);
+  return onSnapshot(msgsRef, (snapshot) => {
+    const messages = snapshot.docs.map((d) => ({ ...d.data() } as FirestoreMessage));
+    messages.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeA - timeB;
+    });
+    console.log("Realtime messages update:", messages.length, "for chat:", chatId);
+    callback(messages);
+  }, (error) => {
+    console.log("Chat messages subscription error:", error);
+  });
+}
+
 export async function markMessagesAsRead(chatId: string, currentUserId: string): Promise<void> {
   try {
     const msgsRef = collection(db, "chats", chatId, "messages");
