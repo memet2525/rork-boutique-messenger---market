@@ -23,9 +23,9 @@ service cloud.firestore {
 
     function isParticipant() {
       return isSignedIn()
-        && resource != null
         && (
-          isSuperAdmin()
+          resource == null
+          || isSuperAdmin()
           || request.auth.uid in resource.data.participants
         );
     }
@@ -167,9 +167,19 @@ service cloud.firestore {
     }
 
     match /chats/{chatId} {
-      allow read: if isParticipant();
+      allow read: if isSignedIn()
+        && (
+          resource == null
+          || isSuperAdmin()
+          || request.auth.uid in resource.data.participants
+        );
       allow create: if validChatCreate(chatId);
-      allow update: if isParticipant()
+      allow update: if isSignedIn()
+        && resource != null
+        && (
+          isSuperAdmin()
+          || request.auth.uid in resource.data.participants
+        )
         && chatIdentityUnchanged();
       allow delete: if isSuperAdmin();
 

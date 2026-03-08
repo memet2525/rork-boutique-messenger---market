@@ -494,9 +494,7 @@ export async function getOrCreateChat(params: {
       return { id: chatSnap.id, ...chatSnap.data() } as FirestoreChat;
     }
 
-    const uniqueParticipants = params.userId === params.storeOwnerId
-      ? [params.userId, params.storeOwnerId]
-      : [params.userId, params.storeOwnerId];
+    const uniqueParticipants = [params.userId, params.storeOwnerId];
 
     const newChat: Omit<FirestoreChat, "id"> = {
       participants: uniqueParticipants,
