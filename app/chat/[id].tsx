@@ -29,6 +29,7 @@ import {
   setTypingStatus,
   getTypingStatus,
   subscribeToChatMessages,
+  getChatMessages,
   FirestoreMessage,
   BUTIKBIZ_ADMIN_ID,
   BUTIKBIZ_NAME,
@@ -236,18 +237,53 @@ export default function ChatDetailScreen() {
 
   const [firestoreMessages, setFirestoreMessages] = useState<FirestoreMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState<boolean>(true);
+  const [_subscriptionFailed, setSubscriptionError] = useState<boolean>(false);
+  const subscriptionRef = useRef<(() => void) | null>(null);
+
+  const startSubscription = useCallback(() => {
+    if (!id) return;
+    if (subscriptionRef.current) {
+      subscriptionRef.current();
+      subscriptionRef.current = null;
+    }
+    setSubscriptionError(false);
+    setIsLoadingMessages(true);
+    console.log("Starting message subscription for chat:", id);
+    const unsubscribe = subscribeToChatMessages(
+      id,
+      (messages) => {
+        setFirestoreMessages(messages);
+        setIsLoadingMessages(false);
+        setSubscriptionError(false);
+      },
+      (error) => {
+        console.log("Message subscription error, attempting fallback fetch:", error);
+        setIsLoadingMessages(false);
+        setSubscriptionError(true);
+        getChatMessages(id).then((msgs) => {
+          if (msgs.length > 0) {
+            setFirestoreMessages(msgs);
+            console.log("Fallback fetch loaded", msgs.length, "messages");
+          }
+        }).catch((fetchErr) => {
+          console.log("Fallback fetch also failed:", fetchErr);
+        });
+      }
+    );
+    subscriptionRef.current = unsubscribe;
+  }, [id]);
 
   useEffect(() => {
-    if (!id) return;
-    setIsLoadingMessages(true);
-    const unsubscribe = subscribeToChatMessages(id, (messages) => {
-      setFirestoreMessages(messages);
-      setIsLoadingMessages(false);
-    });
+    if (!id || !isChatReady) return;
+    console.log("Chat is ready, starting subscription for:", id);
+    startSubscription();
     return () => {
-      unsubscribe();
+      if (subscriptionRef.current) {
+        subscriptionRef.current();
+        subscriptionRef.current = null;
+      }
     };
-  }, [id]);
+  }, [id, isChatReady, startSubscription]);
 
   useEffect(() => {
     if (id && uid && firestoreMessages.length > 0) {
@@ -367,6 +403,10 @@ export default function ChatDetailScreen() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+      if (!subscriptionRef.current) {
+        console.log("Subscription was dead, restarting after send success");
+        startSubscription();
+      }
     },
   });
 

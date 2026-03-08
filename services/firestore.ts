@@ -663,7 +663,8 @@ export async function getChatMessages(chatId: string): Promise<FirestoreMessage[
 
 export function subscribeToChatMessages(
   chatId: string,
-  callback: (messages: FirestoreMessage[]) => void
+  callback: (messages: FirestoreMessage[]) => void,
+  onError?: (error: any) => void
 ): Unsubscribe {
   const msgsRef = collection(db, "chats", chatId, "messages");
   console.log("Subscribing to chat messages:", chatId);
@@ -678,6 +679,9 @@ export function subscribeToChatMessages(
     callback(messages);
   }, (error) => {
     console.log("Chat messages subscription error:", error);
+    if (onError) {
+      onError(error);
+    }
   });
 }
 
