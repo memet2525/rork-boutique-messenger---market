@@ -8,6 +8,7 @@ import {
   Animated,
   Pressable,
   ActivityIndicator,
+  GestureResponderEvent,
 } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter, Stack, RelativePathString } from "expo-router";
@@ -22,12 +23,32 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { stores, Store, Product } from "@/mocks/stores";
-import { useUser } from "@/contexts/UserContext";
+import { useUser, type FavoriteProductSnapshot } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
 import { getFirestoreStore, getFirestoreStoreBySlug, getChatId, getOrCreateChat } from "@/services/firestore";
 
-function ProductCard({ product, storeId, onPress }: { product: Product; storeId: string; onPress: () => void }) {
+function ProductCard({
+  product,
+  isFavorite,
+  onPress,
+  onToggleFavorite,
+}: {
+  product: Product;
+  isFavorite: boolean;
+  onPress: () => void;
+  onToggleFavorite: () => void;
+}) {
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
+  const heartScale = React.useRef(new Animated.Value(1)).current;
+
+  const handleFavoritePress = React.useCallback((event: GestureResponderEvent) => {
+    event.stopPropagation();
+    Animated.sequence([
+      Animated.spring(heartScale, { toValue: 1.2, useNativeDriver: true, speed: 50 }),
+      Animated.spring(heartScale, { toValue: 1, useNativeDriver: true, friction: 4 }),
+    ]).start();
+    onToggleFavorite();
+  }, [heartScale, onToggleFavorite]);
 
   return (
     <Animated.View style={[styles.productCard, { transform: [{ scale: scaleAnim }] }]}>
@@ -46,8 +67,19 @@ function ProductCard({ product, storeId, onPress }: { product: Product; storeId:
           <Text style={styles.productName} numberOfLines={2}>{product.name}</Text>
           <Text style={styles.productPrice}>{product.price}</Text>
         </View>
-        <TouchableOpacity style={styles.heartButton}>
-          <Heart size={18} color={Colors.textLight} />
+        <TouchableOpacity
+          style={[styles.heartButton, isFavorite && styles.heartButtonActive]}
+          onPress={handleFavoritePress}
+          activeOpacity={0.85}
+          testID={`store-product-favorite-${product.id}`}
+        >
+          <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+            <Heart
+              size={18}
+              color={isFavorite ? Colors.white : Colors.textLight}
+              fill={isFavorite ? Colors.white : "transparent"}
+            />
+          </Animated.View>
         </TouchableOpacity>
       </Pressable>
     </Animated.View>
@@ -58,7 +90,7 @@ export default function StoreDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { profile, isLoggedIn, uid } = useUser();
+  const { profile, isLoggedIn, uid, toggleFavorite } = useUser();
   const { showAlert } = useAlert();
 
   const isMockOrOwn = id === "my-store" || !!stores.find((s) => s.id === id);
@@ -111,7 +143,7 @@ export default function StoreDetailScreen() {
       return chatId;
     },
     onSuccess: (chatId) => {
-      queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+      void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
       router.push({
         pathname: "/chat/[id]" as RelativePathString,
         params: {
@@ -176,6 +208,42 @@ export default function StoreDetailScreen() {
     }
     return undefined;
   }, [id, profile, firestoreData]);
+
+  const handleToggleProductFavorite = React.useCallback((product: Product) => {
+    if (!store) {
+      return;
+    }
+
+    if (!isLoggedIn) {
+      showAlert(
+        "Giriş Gerekli",
+        "Favori ürünlerini kaydetmek için giriş yapman gerekiyor.",
+        [
+          { text: "İptal", style: "cancel" },
+          { text: "Giriş Yap", onPress: () => router.push("/login" as never) },
+        ]
+      );
+      return;
+    }
+
+    const favoriteSnapshot: FavoriteProductSnapshot = {
+      productId: product.id,
+      storeId: resolvedStoreId ?? store.id,
+      storeOwnerId: storeOwnerId ?? resolvedStoreId ?? store.id,
+      storeName: store.name,
+      storeAvatar: store.avatar,
+      productName: product.name,
+      productPrice: product.price,
+      productImage: product.image,
+      productDescription: product.description ?? "",
+      addedAt: new Date().toISOString(),
+    };
+
+    void toggleFavorite(product.id, favoriteSnapshot).catch((error: unknown) => {
+      console.error("Store product favorite toggle failed:", error);
+      showAlert("Hata", "Favori güncellenirken bir sorun oluştu. Lütfen tekrar deneyin.");
+    });
+  }, [store, isLoggedIn, showAlert, router, resolvedStoreId, storeOwnerId, toggleFavorite]);
 
   if (isLoading) {
     return (
@@ -268,7 +336,13 @@ export default function StoreDetailScreen() {
           <Text style={styles.sectionTitle}>Ürünler ({store.products.length})</Text>
           <View style={styles.productsGrid}>
             {store.products.map((product) => (
-              <ProductCard key={product.id} product={product} storeId={store.id} onPress={() => handleProductPress(product.id)} />
+              <ProductCard
+                key={product.id}
+                product={product}
+                isFavorite={profile.favorites.includes(product.id)}
+                onPress={() => handleProductPress(product.id)}
+                onToggleFavorite={() => handleToggleProductFavorite(product)}
+              />
             ))}
           </View>
         </View>
@@ -464,5 +538,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.9)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  heartButtonActive: {
+    backgroundColor: Colors.danger,
+    shadowColor: Colors.danger,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 4,
   },
 });

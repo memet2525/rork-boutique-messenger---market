@@ -1,13 +1,89 @@
 import { Tabs, useRouter } from "expo-router";
-import { MessageCircle, User, Home, ShoppingBag } from "lucide-react-native";
-import React, { useCallback } from "react";
-import { StyleSheet, View } from "react-native";
+import { MessageCircle, User, Home, ShoppingBag, Heart } from "lucide-react-native";
+import React, { useCallback, useEffect, useRef } from "react";
+import { Animated, StyleSheet, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { useUser } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
 import { getUnreadMessageCount } from "@/services/firestore";
+
+function TabIcon({
+  focused,
+  children,
+}: {
+  focused: boolean;
+  children: React.ReactNode;
+}) {
+  return <View style={focused ? tabStyles.activeIconBg : undefined}>{children}</View>;
+}
+
+function FavoriteTabIcon({ focused }: { focused: boolean }) {
+  const pulseAnim = useRef(new Animated.Value(focused ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (!focused) {
+      pulseAnim.setValue(0);
+      return;
+    }
+
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    animation.start();
+    return () => {
+      animation.stop();
+    };
+  }, [focused, pulseAnim]);
+
+  const haloScale = pulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.9, 1.25],
+  });
+
+  const haloOpacity = pulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.08, 0.22],
+  });
+
+  return (
+    <View style={tabStyles.favoriteIconWrapper}>
+      {focused ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            tabStyles.favoriteHalo,
+            {
+              opacity: haloOpacity,
+              transform: [{ scale: haloScale }],
+            },
+          ]}
+        />
+      ) : null}
+      <View style={focused ? tabStyles.favoriteActiveIconBg : tabStyles.favoriteInactiveIconBg}>
+        <Heart
+          color={focused ? Colors.white : Colors.textLight}
+          size={22}
+          strokeWidth={focused ? 2.5 : 2}
+          fill={focused ? Colors.danger : "transparent"}
+        />
+      </View>
+    </View>
+  );
+}
 
 export default function TabLayout() {
   const { isLoggedIn, uid, profile } = useUser();
@@ -47,7 +123,6 @@ export default function TabLayout() {
           backgroundColor: Colors.white,
           borderTopColor: "#E8ECF0",
           borderTopWidth: 1,
-
           shadowColor: "#000",
           shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.04,
@@ -69,10 +144,20 @@ export default function TabLayout() {
         options={{
           title: "Keşfet",
           tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? tabStyles.activeIconBg : undefined}>
+            <TabIcon focused={focused}>
               <Home color={color} size={22} strokeWidth={focused ? 2.5 : 1.8} />
-            </View>
+            </TabIcon>
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="favorites"
+        options={{
+          title: "Favoriler",
+          tabBarIcon: ({ focused }) => <FavoriteTabIcon focused={focused} />,
+        }}
+        listeners={{
+          tabPress: handleAuthTab,
         }}
       />
       <Tabs.Screen
@@ -80,9 +165,9 @@ export default function TabLayout() {
         options={{
           title: "Sohbetler",
           tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? tabStyles.activeIconBg : undefined}>
+            <TabIcon focused={focused}>
               <MessageCircle color={color} size={22} strokeWidth={focused ? 2.5 : 1.8} />
-            </View>
+            </TabIcon>
           ),
           tabBarBadge: isLoggedIn && unreadCount > 0 ? unreadCount : undefined,
           tabBarBadgeStyle: {
@@ -104,9 +189,9 @@ export default function TabLayout() {
           title: "Mağazam",
           href: profile.isStore ? undefined : null,
           tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? tabStyles.activeIconBg : undefined}>
+            <TabIcon focused={focused}>
               <ShoppingBag color={color} size={22} strokeWidth={focused ? 2.5 : 1.8} />
-            </View>
+            </TabIcon>
           ),
         }}
         listeners={{
@@ -118,9 +203,9 @@ export default function TabLayout() {
         options={{
           title: "Profil",
           tabBarIcon: ({ color, focused }) => (
-            <View style={focused ? tabStyles.activeIconBg : undefined}>
+            <TabIcon focused={focused}>
               <User color={color} size={22} strokeWidth={focused ? 2.5 : 1.8} />
-            </View>
+            </TabIcon>
           ),
         }}
         listeners={{
@@ -134,6 +219,32 @@ export default function TabLayout() {
 const tabStyles = StyleSheet.create({
   activeIconBg: {
     backgroundColor: "rgba(7, 94, 84, 0.08)",
+    borderRadius: 12,
+    padding: 4,
+  },
+  favoriteIconWrapper: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  favoriteHalo: {
+    position: "absolute",
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Colors.danger,
+  },
+  favoriteActiveIconBg: {
+    backgroundColor: Colors.danger,
+    borderRadius: 12,
+    padding: 4,
+    shadowColor: Colors.danger,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  favoriteInactiveIconBg: {
+    backgroundColor: "transparent",
     borderRadius: 12,
     padding: 4,
   },

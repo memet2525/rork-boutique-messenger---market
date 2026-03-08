@@ -48,6 +48,19 @@ export interface StoreProduct {
   createdAt: string;
 }
 
+export interface FavoriteProductSnapshot {
+  productId: string;
+  storeId: string;
+  storeOwnerId: string;
+  storeName: string;
+  storeAvatar: string;
+  productName: string;
+  productPrice: string;
+  productImage: string;
+  productDescription: string;
+  addedAt: string;
+}
+
 export type SubscriptionPlan = "none" | "trial" | "monthly" | "yearly";
 export type SubscriptionStatus = "active" | "expired" | "pending_payment";
 
@@ -67,6 +80,7 @@ export interface UserProfile {
   storeProducts: StoreProduct[];
   addressSubmissions: AddressSubmission[];
   favorites: string[];
+  favoriteSnapshots: FavoriteProductSnapshot[];
   notificationsEnabled: boolean;
   chatNotifications: boolean;
   orderNotifications: boolean;
@@ -110,6 +124,7 @@ const DEFAULT_PROFILE: UserProfile = {
   storeProducts: [],
   addressSubmissions: [],
   favorites: [],
+  favoriteSnapshots: [],
   notificationsEnabled: true,
   chatNotifications: true,
   orderNotifications: true,
@@ -180,6 +195,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
         merged.storeProducts = Array.isArray(merged.storeProducts) ? merged.storeProducts : [];
         merged.addressSubmissions = Array.isArray(merged.addressSubmissions) ? merged.addressSubmissions : [];
         merged.favorites = Array.isArray(merged.favorites) ? merged.favorites : [];
+        merged.favoriteSnapshots = Array.isArray(merged.favoriteSnapshots) ? merged.favoriteSnapshots : [];
         merged.systemNotifications = Array.isArray(merged.systemNotifications) ? merged.systemNotifications : [];
         return merged;
       }
@@ -367,13 +383,40 @@ export const [UserProvider, useUser] = createContextHook(() => {
   }, [profile]);
 
   const toggleFavorite = useCallback(
-    (productId: string) => {
-      const favorites = profile.favorites.includes(productId)
-        ? profile.favorites.filter((id) => id !== productId)
-        : [...profile.favorites, productId];
-      void updateProfile({ favorites });
+    async (productId: string, snapshot?: FavoriteProductSnapshot): Promise<boolean> => {
+      const latestProfile = profileRef.current;
+      const currentFavorites = Array.isArray(latestProfile.favorites) ? latestProfile.favorites : [];
+      const currentSnapshots = Array.isArray(latestProfile.favoriteSnapshots) ? latestProfile.favoriteSnapshots : [];
+      const isCurrentlyFavorite = currentFavorites.includes(productId);
+
+      const favorites = isCurrentlyFavorite
+        ? currentFavorites.filter((id) => id !== productId)
+        : [...currentFavorites, productId];
+
+      const fallbackSnapshot: FavoriteProductSnapshot = {
+        productId,
+        storeId: "",
+        storeOwnerId: "",
+        storeName: "",
+        storeAvatar: "",
+        productName: "",
+        productPrice: "",
+        productImage: "",
+        productDescription: "",
+        addedAt: new Date().toISOString(),
+      };
+
+      const favoriteSnapshots = isCurrentlyFavorite
+        ? currentSnapshots.filter((item) => item.productId !== productId)
+        : [
+            ...currentSnapshots.filter((item) => item.productId !== productId),
+            snapshot ?? fallbackSnapshot,
+          ];
+
+      await updateProfile({ favorites, favoriteSnapshots });
+      return !isCurrentlyFavorite;
     },
-    [profile.favorites, updateProfile]
+    [updateProfile]
   );
 
   const addStoreProduct = useCallback(
@@ -509,6 +552,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
           merged.storeProducts = Array.isArray(merged.storeProducts) ? merged.storeProducts : [];
           merged.addressSubmissions = Array.isArray(merged.addressSubmissions) ? merged.addressSubmissions : [];
           merged.favorites = Array.isArray(merged.favorites) ? merged.favorites : [];
+          merged.favoriteSnapshots = Array.isArray(merged.favoriteSnapshots) ? merged.favoriteSnapshots : [];
           merged.systemNotifications = Array.isArray(merged.systemNotifications) ? merged.systemNotifications : [];
           setProfile(merged);
           queryClient.setQueryData(["userProfile", userUid], merged);

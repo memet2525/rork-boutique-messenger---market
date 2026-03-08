@@ -29,7 +29,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { stores } from "@/mocks/stores";
-import { useUser } from "@/contexts/UserContext";
+import { useUser, type FavoriteProductSnapshot } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
 import { getProductLink } from "@/utils/links";
 import { getChatId, getFirestoreStore, getOrCreateChat } from "@/services/firestore";
@@ -38,11 +38,11 @@ export default function ProductDetailScreen() {
   const { id, storeId, storeOwnerId: storeOwnerIdParam } = useLocalSearchParams<{ id: string; storeId: string; storeOwnerId?: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { profile, isLoggedIn, uid } = useUser();
+  const { profile, isLoggedIn, uid, toggleFavorite: toggleFavoriteProduct } = useUser();
   const { showAlert } = useAlert();
-  const [isFavorite, setIsFavorite] = useState<boolean>(false);
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
   const heartScale = useRef(new Animated.Value(1)).current;
+  const favoritePulse = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = Dimensions.get("window");
@@ -136,6 +136,11 @@ export default function ProductDetailScreen() {
   const productData = result?.product;
   const storeData = result?.store;
 
+  const isFavorite = useMemo(() => {
+    if (!id) return false;
+    return profile.favorites.includes(id);
+  }, [id, profile.favorites]);
+
   const productImages = useMemo(() => {
     if (!productData) return [];
     const imgs = (productData as any).images as string[] | undefined;
@@ -152,28 +157,76 @@ export default function ProductDetailScreen() {
     [windowWidth]
   );
 
-  const toggleFavorite = useCallback(() => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const handleToggleFavorite = useCallback(() => {
+    if (!productData) {
+      return;
     }
-    setIsFavorite((prev) => !prev);
-    Animated.sequence([
-      Animated.spring(heartScale, {
-        toValue: 1.3,
-        useNativeDriver: true,
-        speed: 50,
-      }),
-      Animated.spring(heartScale, {
-        toValue: 1,
-        friction: 3,
-        useNativeDriver: true,
-      }),
+
+    if (!isLoggedIn) {
+      showAlert(
+        "Giriş Gerekli",
+        "Favori ürünlerini kaydetmek için giriş yapman gerekiyor.",
+        [
+          { text: "İptal", style: "cancel" },
+          { text: "Giriş Yap", onPress: () => router.push("/login" as never) },
+        ]
+      );
+      return;
+    }
+
+    if (Platform.OS !== "web") {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    Animated.parallel([
+      Animated.sequence([
+        Animated.spring(heartScale, {
+          toValue: 1.26,
+          useNativeDriver: true,
+          speed: 50,
+        }),
+        Animated.spring(heartScale, {
+          toValue: 1,
+          friction: 4,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.sequence([
+        Animated.timing(favoritePulse, {
+          toValue: 1,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+        Animated.timing(favoritePulse, {
+          toValue: 0,
+          duration: 260,
+          useNativeDriver: true,
+        }),
+      ]),
     ]).start();
-  }, [heartScale]);
+
+    const favoriteSnapshot: FavoriteProductSnapshot = {
+      productId: productData.id,
+      storeId: storeData?.id ?? storeId ?? "",
+      storeOwnerId: storeOwnerIdParam ?? ((firestoreStoreQuery.data?.ownerId as string | undefined) ?? (storeData?.id ?? storeId ?? "")),
+      storeName: storeData?.name ?? "Mağaza",
+      storeAvatar: storeData?.avatar ?? "",
+      productName: productData.name ?? "",
+      productPrice: productData.price ?? "",
+      productImage: productData.image ?? "",
+      productDescription: productData.description ?? "",
+      addedAt: new Date().toISOString(),
+    };
+
+    void toggleFavoriteProduct(productData.id, favoriteSnapshot).catch((error: unknown) => {
+      console.error("Favorite toggle failed:", error);
+      showAlert("Hata", "Favori güncellenirken bir sorun oluştu. Lütfen tekrar deneyin.");
+    });
+  }, [productData, isLoggedIn, showAlert, router, heartScale, favoritePulse, toggleFavoriteProduct, storeData, storeId, storeOwnerIdParam, firestoreStoreQuery.data]);
 
   const handleShare = useCallback(async () => {
     if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     try {
       const productUrl = getProductLink(productData?.name ?? "", storeData?.name);
@@ -214,7 +267,7 @@ export default function ProductDetailScreen() {
       return { chatId, targetStoreId };
     },
     onSuccess: ({ chatId, targetStoreId }) => {
-      queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
+      void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
       const productInfo = `🛍️ ${productData?.name}\n💰 ${productData?.price}\n\nBu ürün hakkında bilgi almak istiyorum.`;
       router.push({
         pathname: "/chat/[id]" as RelativePathString,
@@ -251,10 +304,10 @@ export default function ProductDetailScreen() {
       return;
     }
     if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     startChatMutation.mutate();
-  }, [isLoggedIn, showAlert, router, startChatMutation.mutate]);
+  }, [isLoggedIn, showAlert, router, startChatMutation]);
 
   if (!productData) {
     return (
@@ -330,23 +383,43 @@ export default function ProductDetailScreen() {
             <X size={22} color={Colors.text} />
           </TouchableOpacity>
 
-          <View style={[styles.imageActions, { top: insets.top + 10 }]}>
-            <Animated.View style={{ transform: [{ scale: heartScale }] }}>
-              <TouchableOpacity
+          <View style={[styles.imageActions, { top: insets.top + 10 }]}> 
+            <View style={styles.favoriteActionWrap}>
+              <Animated.View
+                pointerEvents="none"
                 style={[
-                  styles.actionCircle,
-                  isFavorite && styles.actionCircleFavorite,
+                  styles.favoriteHalo,
+                  {
+                    opacity: favoritePulse.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, 0.28],
+                    }),
+                    transform: [{
+                      scale: favoritePulse.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.9, 1.45],
+                      }),
+                    }],
+                  },
                 ]}
-                onPress={toggleFavorite}
-                testID="product-favorite"
-              >
-                <Heart
-                  size={22}
-                  color={isFavorite ? Colors.white : Colors.text}
-                  fill={isFavorite ? Colors.danger : "transparent"}
-                />
-              </TouchableOpacity>
-            </Animated.View>
+              />
+              <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+                <TouchableOpacity
+                  style={[
+                    styles.actionCircle,
+                    isFavorite && styles.actionCircleFavorite,
+                  ]}
+                  onPress={handleToggleFavorite}
+                  testID="product-favorite"
+                >
+                  <Heart
+                    size={22}
+                    color={isFavorite ? Colors.white : Colors.text}
+                    fill={isFavorite ? Colors.white : "transparent"}
+                  />
+                </TouchableOpacity>
+              </Animated.View>
+            </View>
 
             <TouchableOpacity
               style={styles.actionCircle}
@@ -495,6 +568,17 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 16,
     gap: 10,
+  },
+  favoriteActionWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  favoriteHalo: {
+    position: "absolute",
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: Colors.danger,
   },
   actionCircle: {
     width: 44,
