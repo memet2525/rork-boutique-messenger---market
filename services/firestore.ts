@@ -22,6 +22,20 @@ import {
   syncAdminStoreRegistry,
 } from "@/services/adminRegistry";
 
+async function ensureAdminAuth(): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    console.log("ensureAdminAuth: No current user");
+    return;
+  }
+  try {
+    await currentUser.getIdToken(true);
+    console.log("ensureAdminAuth: Token refreshed for", currentUser.email);
+  } catch (error) {
+    console.log("ensureAdminAuth: Token refresh failed", error);
+  }
+}
+
 export async function getUserProfile(uid: string): Promise<Record<string, any> | null> {
   const cachedProfile = await readCachedUserProfile(uid);
 
@@ -217,10 +231,12 @@ export async function saveUserProfile(uid: string, data: Record<string, any>): P
 
 export async function getFirestoreStores(): Promise<Record<string, any>[]> {
   try {
+    await ensureAdminAuth();
     const snapshot = await getDocs(collection(db, "stores"));
+    console.log("getFirestoreStores: Found", snapshot.size, "stores");
     return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-  } catch (error) {
-    console.log("Error loading stores:", error);
+  } catch (error: any) {
+    console.log("getFirestoreStores ERROR:", error?.code, error?.message, error);
     return [];
   }
 }
@@ -363,21 +379,26 @@ export async function saveAdminSettings(data: Record<string, any>): Promise<void
 
 export async function getAllUsers(): Promise<Record<string, any>[]> {
   try {
+    await ensureAdminAuth();
+    console.log("getAllUsers: Fetching all users from Firestore...");
     const snapshot = await getDocs(collection(db, "users"));
+    console.log("getAllUsers: Found", snapshot.size, "users");
     return snapshot.docs.map((d) => ({ uid: d.id, ...d.data() }));
-  } catch (error) {
-    console.log("Error loading all users:", error);
+  } catch (error: any) {
+    console.log("getAllUsers ERROR:", error?.code, error?.message, error);
     return [];
   }
 }
 
 export async function getStoreOwners(): Promise<Record<string, any>[]> {
   try {
+    await ensureAdminAuth();
     const q = query(collection(db, "users"), where("isStore", "==", true));
     const snapshot = await getDocs(q);
+    console.log("getStoreOwners: Found", snapshot.size, "store owners");
     return snapshot.docs.map((d) => ({ uid: d.id, ...d.data() }));
-  } catch (error) {
-    console.log("Error loading store owners:", error);
+  } catch (error: any) {
+    console.log("getStoreOwners ERROR:", error?.code, error?.message, error);
     return [];
   }
 }
@@ -394,25 +415,33 @@ export async function sendSystemNotification(
   }
 ): Promise<void> {
   try {
+    await ensureAdminAuth();
     const userRef = doc(db, "users", targetUid);
     try {
       const userSnap = await getDoc(userRef);
       if (!userSnap.exists()) {
         console.log("sendSystemNotification: user doc does not exist, creating:", targetUid);
-        await setDoc(userRef, { systemNotifications: [notification] }, { merge: true });
+        await setDoc(userRef, { uid: targetUid, systemNotifications: [notification], updatedAt: serverTimestamp() }, { merge: true });
       } else {
         await updateDoc(userRef, {
           systemNotifications: arrayUnion(notification),
+          updatedAt: serverTimestamp(),
         });
       }
       console.log("System notification sent to:", targetUid);
     } catch (writeErr: any) {
-      console.log("sendSystemNotification write failed, trying setDoc merge:", writeErr?.code, writeErr?.message);
-      await setDoc(userRef, { systemNotifications: arrayUnion(notification) }, { merge: true });
-      console.log("System notification sent via setDoc merge to:", targetUid);
+      console.log("sendSystemNotification write failed:", writeErr?.code, writeErr?.message);
+      try {
+        await setDoc(userRef, { uid: targetUid, systemNotifications: arrayUnion(notification), updatedAt: serverTimestamp() }, { merge: true });
+        console.log("System notification sent via setDoc merge to:", targetUid);
+      } catch (setDocErr: any) {
+        console.log("sendSystemNotification setDoc also failed:", setDocErr?.code, setDocErr?.message);
+        throw setDocErr;
+      }
     }
   } catch (error: any) {
     console.log("Error sending system notification to:", targetUid, error?.code, error?.message);
+    throw error;
   }
 }
 
@@ -1052,6 +1081,7 @@ export const BUTIKBIZ_AVATAR = "https://images.unsplash.com/photo-1556742049-0cf
 
 export async function getOrCreateAdminChat(targetUid: string): Promise<string> {
   try {
+    await ensureAdminAuth();
     const chatId = `admin_${targetUid}`;
     const chatRef = doc(db, "chats", chatId);
     let chatSnap: any = null;

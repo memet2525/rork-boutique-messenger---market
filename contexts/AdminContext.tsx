@@ -291,9 +291,15 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       console.log("Admin: Loading all users from Firestore...");
       const allUsers = await getAllUsers();
       console.log("Admin: Loaded", allUsers.length, "users from Firestore");
+      if (allUsers.length > 0) {
+        console.log("Admin: First user keys:", Object.keys(allUsers[0]).join(", "));
+        console.log("Admin: User UIDs:", allUsers.map(u => u.uid).join(", "));
+      }
       return allUsers;
     },
-    refetchInterval: 15000,
+    refetchInterval: 10000,
+    retry: 3,
+    retryDelay: 2000,
   });
 
   const realStoresQuery = useQuery({
@@ -304,7 +310,9 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       console.log("Admin: Loaded", allStores.length, "stores from Firestore");
       return allStores;
     },
-    refetchInterval: 15000,
+    refetchInterval: 10000,
+    retry: 3,
+    retryDelay: 2000,
   });
 
   const registryUsersQuery = useQuery({
@@ -315,7 +323,9 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       console.log("Admin: Loaded", registryUsers.length, "registry users");
       return registryUsers;
     },
-    refetchInterval: 15000,
+    refetchInterval: 10000,
+    retry: 3,
+    retryDelay: 2000,
   });
 
   const registryStoresQuery = useQuery({
@@ -326,7 +336,9 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       console.log("Admin: Loaded", registryStores.length, "registry stores");
       return registryStores;
     },
-    refetchInterval: 15000,
+    refetchInterval: 10000,
+    retry: 3,
+    retryDelay: 2000,
   });
 
   const settingsQuery = useQuery({
@@ -392,29 +404,17 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     const registryUsers = registryUsersQuery.data ?? [];
     const registryStores = registryStoresQuery.data ?? [];
 
+    console.log("Admin merge: allUsers=", allUsers.length, "allStores=", allStores.length, "regUsers=", registryUsers.length, "regStores=", registryStores.length);
+
     const mergedUserMap = new Map<string, Record<string, any>>();
     const mergedStoreMap = new Map<string, Record<string, any>>();
-
-    for (const user of allUsers) {
-      const userId = typeof user.uid === "string" ? user.uid : typeof user.id === "string" ? user.id : "";
-      if (!userId) continue;
-      mergedUserMap.set(userId, { ...(mergedUserMap.get(userId) ?? {}), ...user });
-    }
-
-    for (const registryUser of registryUsers) {
-      const userId = typeof registryUser.uid === "string"
-        ? registryUser.uid
-        : typeof registryUser.id === "string"
-          ? registryUser.id
-          : "";
-      if (!userId) continue;
-      mergedUserMap.set(userId, { ...(mergedUserMap.get(userId) ?? {}), ...registryUser });
-    }
+    const storeOwnerIds = new Set<string>();
 
     for (const store of allStores) {
       const ownerId = typeof store.ownerId === "string" ? store.ownerId : typeof store.id === "string" ? store.id : "";
       if (!ownerId) continue;
       mergedStoreMap.set(ownerId, { ...(mergedStoreMap.get(ownerId) ?? {}), ...store });
+      storeOwnerIds.add(ownerId);
     }
 
     for (const registryStore of registryStores) {
@@ -425,6 +425,29 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
           : "";
       if (!ownerId) continue;
       mergedStoreMap.set(ownerId, { ...(mergedStoreMap.get(ownerId) ?? {}), ...registryStore });
+      storeOwnerIds.add(ownerId);
+    }
+
+    for (const user of allUsers) {
+      const userId = typeof user.uid === "string" ? user.uid : typeof user.id === "string" ? user.id : "";
+      if (!userId) continue;
+      mergedUserMap.set(userId, { ...(mergedUserMap.get(userId) ?? {}), ...user });
+      if (user.isStore === true) {
+        storeOwnerIds.add(userId);
+      }
+    }
+
+    for (const registryUser of registryUsers) {
+      const userId = typeof registryUser.uid === "string"
+        ? registryUser.uid
+        : typeof registryUser.id === "string"
+          ? registryUser.id
+          : "";
+      if (!userId) continue;
+      mergedUserMap.set(userId, { ...(mergedUserMap.get(userId) ?? {}), ...registryUser });
+      if (registryUser.isStore === true) {
+        storeOwnerIds.add(userId);
+      }
     }
 
     const storeMembers: StoreMember[] = [];
@@ -438,7 +461,9 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       const userEmail = user.email || storeData?.email || "";
       const createdAtRaw = getFirestoreDate(user, "createdAt") || getFirestoreDate(storeData ?? {}, "createdAt") || getFirestoreDate(user, "updatedAt") || "";
       const accountStatus = (storeData?.adminStatus || user.accountStatus || "active") as MemberStatus;
-      const isStoreAccount = Boolean(user.isStore || storeData);
+      const isStoreAccount = storeOwnerIds.has(userId);
+
+      console.log("Admin merge user:", userId, "name:", userName, "isStore:", isStoreAccount, "user.isStore:", user.isStore, "hasStoreData:", !!storeData);
 
       if (isStoreAccount) {
         const storeName = user.storeName || storeData?.name || userName;
@@ -509,7 +534,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       });
     }
 
-    console.log("Admin: Mapped", storeMembers.length, "stores,", customerMembers.length, "customers");
+    console.log("Admin: Final mapped", storeMembers.length, "stores,", customerMembers.length, "customers, storeOwnerIds:", Array.from(storeOwnerIds).join(","));
     setStores(storeMembers);
     setCustomers(customerMembers);
   }, [realUsersQuery.data, realStoresQuery.data, registryUsersQuery.data, registryStoresQuery.data, queryClient]);
@@ -671,16 +696,23 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
 
   const sendMessageToAll = useCallback(
     async (title: string, message: string) => {
+      console.log("sendMessageToAll: Starting...");
       const users = await getAllUsers();
+      console.log("sendMessageToAll: Got", users.length, "users");
       if (users.length === 0) {
-        throw new Error("Kullanici bulunamadi.");
+        throw new Error("Kullanici bulunamadi. Firestore 'users' koleksiyonunu kontrol edin.");
       }
       const chatText = `\u{1F4E2} ${title}\n\n${message}`;
       const validUids = users.map((u) => u.uid).filter((uid) => uid && uid.trim() !== "");
-      console.log("Sending admin message to", validUids.length, "users (total:", users.length, ")");
+      console.log("sendMessageToAll: Sending to", validUids.length, "valid UIDs");
 
-      const chatResult = await sendAdminChatToMultipleUsers(validUids, chatText);
-      console.log("Chat results:", chatResult);
+      let chatResult = { sentCount: 0, failCount: 0, errors: [] as string[] };
+      try {
+        chatResult = await sendAdminChatToMultipleUsers(validUids, chatText);
+        console.log("Chat results:", chatResult);
+      } catch (chatErr: any) {
+        console.log("sendMessageToAll: Chat send error:", chatErr?.message);
+      }
 
       let notifSuccess = 0;
       let notifFail = 0;
@@ -699,15 +731,15 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
           };
           await sendSystemNotification(uid, notification);
           notifSuccess++;
-        } catch (err) {
+        } catch (err: any) {
           notifFail++;
-          console.log("Notification failed for:", uid, err);
+          console.log("Notification failed for:", uid, err?.code, err?.message);
         }
       }
       console.log("Message sent to all - chat:", chatResult.sentCount, "/", validUids.length, "notif:", notifSuccess, "/", users.length, "notifFail:", notifFail);
 
       if (chatResult.sentCount === 0 && notifSuccess === 0) {
-        throw new Error(`Mesaj gonderilemedi. ${chatResult.errors.length > 0 ? chatResult.errors[0] : "Firestore kurallari kontrol edin."}`);
+        throw new Error(`Mesaj gonderilemedi. Chat: ${chatResult.errors.length > 0 ? chatResult.errors[0] : "hata yok"} | Notif basarisiz: ${notifFail}`);
       }
     },
     []
@@ -715,15 +747,42 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
 
   const sendMessageToStoreOwners = useCallback(
     async (title: string, message: string) => {
+      console.log("sendMessageToStoreOwners: Starting...");
       const owners = await getStoreOwners();
+      console.log("sendMessageToStoreOwners: Got", owners.length, "owners");
       if (owners.length === 0) {
-        throw new Error("Magaza sahibi bulunamadi.");
+        const allUsers = await getAllUsers();
+        const storeUsers = allUsers.filter((u) => u.isStore === true);
+        if (storeUsers.length === 0) {
+          throw new Error("Magaza sahibi bulunamadi.");
+        }
+        const chatText = `\u{1F3EA} ${title}\n\n${message}`;
+        const validUids = storeUsers.map((u) => u.uid).filter((uid) => uid && uid.trim() !== "");
+        const chatResult = await sendAdminChatToMultipleUsers(validUids, chatText);
+        let notifSuccess = 0;
+        const baseTime = Date.now();
+        for (let i = 0; i < storeUsers.length; i++) {
+          const uid = storeUsers[i].uid;
+          if (!uid || uid.trim() === "") continue;
+          try {
+            await sendSystemNotification(uid, { id: `notif_${baseTime}_${i}_${Math.random().toString(36).substr(2, 6)}`, title, message, type: "admin_store_message", createdAt: new Date().toISOString(), read: false });
+            notifSuccess++;
+          } catch (err) { console.log("Notification failed for store owner:", uid, err); }
+        }
+        if (chatResult.sentCount === 0 && notifSuccess === 0) {
+          throw new Error("Mesaj gonderilemedi.");
+        }
+        return;
       }
       const chatText = `\u{1F3EA} ${title}\n\n${message}`;
       const validUids = owners.map((o) => o.uid).filter((uid) => uid && uid.trim() !== "");
-      console.log("Sending admin message to", validUids.length, "store owners");
 
-      const chatResult = await sendAdminChatToMultipleUsers(validUids, chatText);
+      let chatResult = { sentCount: 0, failCount: 0, errors: [] as string[] };
+      try {
+        chatResult = await sendAdminChatToMultipleUsers(validUids, chatText);
+      } catch (chatErr: any) {
+        console.log("sendMessageToStoreOwners: Chat error:", chatErr?.message);
+      }
 
       let notifSuccess = 0;
       const baseTime = Date.now();
@@ -748,7 +807,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       console.log("Message sent to store owners - chat:", chatResult.sentCount, "notif:", notifSuccess);
 
       if (chatResult.sentCount === 0 && notifSuccess === 0) {
-        throw new Error(`Mesaj gonderilemedi. ${chatResult.errors.length > 0 ? chatResult.errors[0] : "Firestore kurallari kontrol edin."}`);
+        throw new Error(`Mesaj gonderilemedi. ${chatResult.errors.length > 0 ? chatResult.errors[0] : ""}`);
       }
     },
     []
@@ -756,16 +815,24 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
 
   const sendMessageToCustomers = useCallback(
     async (title: string, message: string) => {
+      console.log("sendMessageToCustomers: Starting...");
       const allUsers = await getAllUsers();
+      console.log("sendMessageToCustomers: Got", allUsers.length, "total users");
       const nonStoreUsers = allUsers.filter((u) => !u.isStore);
+      console.log("sendMessageToCustomers: Found", nonStoreUsers.length, "non-store users");
       if (nonStoreUsers.length === 0) {
-        throw new Error("Musteri bulunamadi.");
+        throw new Error("Musteri bulunamadi. Toplam kullanici: " + allUsers.length);
       }
       const chatText = `\u{1F44B} ${title}\n\n${message}`;
       const validUids = nonStoreUsers.map((u) => u.uid).filter((uid) => uid && uid.trim() !== "");
       console.log("Sending admin message to", validUids.length, "customers");
 
-      const chatResult = await sendAdminChatToMultipleUsers(validUids, chatText);
+      let chatResult = { sentCount: 0, failCount: 0, errors: [] as string[] };
+      try {
+        chatResult = await sendAdminChatToMultipleUsers(validUids, chatText);
+      } catch (chatErr: any) {
+        console.log("sendMessageToCustomers: Chat error:", chatErr?.message);
+      }
 
       let notifSuccess = 0;
       const baseTime = Date.now();
@@ -790,7 +857,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       console.log("Message sent to customers - chat:", chatResult.sentCount, "notif:", notifSuccess);
 
       if (chatResult.sentCount === 0 && notifSuccess === 0) {
-        throw new Error(`Mesaj gonderilemedi. ${chatResult.errors.length > 0 ? chatResult.errors[0] : "Firestore kurallari kontrol edin."}`);
+        throw new Error(`Mesaj gonderilemedi. ${chatResult.errors.length > 0 ? chatResult.errors[0] : ""}`);
       }
     },
     []
