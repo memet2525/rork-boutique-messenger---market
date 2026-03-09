@@ -494,10 +494,11 @@ export default function ChatDetailScreen() {
         if (chatInitDone.current || !storeId) {
           hasInjectedProduct.current = true;
 
-          console.log("Sending product message with image:", id, productImage);
+          const decodedProductImage = productImage ? decodeURIComponent(productImage) : undefined;
+          console.log("Sending product message with image:", id, decodedProductImage);
           sendMessageMutate({
             text: productMessage,
-            productImage: productImage || undefined,
+            productImage: decodedProductImage || undefined,
             productName: productName || undefined,
             productPrice: productPrice || undefined,
           });
