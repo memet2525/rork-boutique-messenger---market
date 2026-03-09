@@ -35,13 +35,16 @@ import {
   MessageCircle,
   FileText,
   RotateCcw,
+  Globe,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/config/firebase";
 import Colors from "@/constants/colors";
-import { useAdmin, StoreMember, CustomerMember, PlanType, DEFAULT_SELLER_AGREEMENT, DEFAULT_USER_AGREEMENT } from "@/contexts/AdminContext";
+import { useAdmin, StoreMember, CustomerMember, PlanType, DEFAULT_SELLER_AGREEMENT, DEFAULT_USER_AGREEMENT, DEFAULT_FOOTER_CONTENT, FooterContent } from "@/contexts/AdminContext";
 import { useAlert } from "@/contexts/AlertContext";
 
 const ADMIN_EMAIL = "atlaspelet.com@gmail.com";
@@ -437,6 +440,10 @@ function SettingsTab() {
   const [showAgreementEditor, setShowAgreementEditor] = useState<boolean>(false);
   const [userAgreementText, setUserAgreementText] = useState<string>(settings.userAgreement);
   const [showUserAgreementEditor, setShowUserAgreementEditor] = useState<boolean>(false);
+  const [expandedFooterField, setExpandedFooterField] = useState<keyof FooterContent | null>(null);
+  const [footerEditText, setFooterEditText] = useState<string>("");
+
+  const footerContent = settings.footerContent || DEFAULT_FOOTER_CONTENT;
 
   const handleSave = useCallback(() => {
     updateSettings({ aiApiKey: apiKey, aiProvider: provider });
@@ -685,10 +692,145 @@ function SettingsTab() {
         )}
       </View>
 
+      <View style={[styles.settingsCard, { marginTop: 16 }]}>
+        <View style={styles.settingsHeader}>
+          <Globe size={20} color={Colors.primary} />
+          <Text style={styles.settingsTitle}>Footer Icerik Yonetimi</Text>
+        </View>
+        <Text style={styles.settingsDesc}>
+          Ana sayfanin altinda gorunen yasal metinleri ve bilgileri buradan duzenleyebilirsiniz.
+        </Text>
+      </View>
+
+      {(Object.keys(BOSS_FOOTER_FIELD_LABELS) as (keyof FooterContent)[]).map((field) => {
+        const isExpanded = expandedFooterField === field;
+        const color = BOSS_FOOTER_FIELD_COLORS[field];
+        return (
+          <View key={field} style={[styles.settingsCard, { marginTop: 12 }]}>
+            <TouchableOpacity
+              style={styles.footerFieldHeader}
+              onPress={() => {
+                if (expandedFooterField === field) {
+                  setExpandedFooterField(null);
+                  return;
+                }
+                setExpandedFooterField(field);
+                setFooterEditText(footerContent[field]);
+              }}
+              activeOpacity={0.7}
+              testID={`boss-footer-field-${field}`}
+            >
+              <View style={[styles.footerFieldDot, { backgroundColor: color }]} />
+              <Text style={styles.footerFieldLabel}>{BOSS_FOOTER_FIELD_LABELS[field]}</Text>
+              {isExpanded ? (
+                <ChevronUp size={18} color={Colors.textSecondary} />
+              ) : (
+                <ChevronDown size={18} color={Colors.textSecondary} />
+              )}
+            </TouchableOpacity>
+
+            {!isExpanded && (
+              <Text style={styles.footerFieldPreview} numberOfLines={2}>
+                {footerContent[field]}
+              </Text>
+            )}
+
+            {isExpanded && (
+              <View style={styles.footerFieldEditor}>
+                <TextInput
+                  style={styles.agreementTextInput}
+                  value={footerEditText}
+                  onChangeText={setFooterEditText}
+                  multiline
+                  textAlignVertical="top"
+                  placeholder={`${BOSS_FOOTER_FIELD_LABELS[field]} metnini girin...`}
+                  placeholderTextColor={Colors.textLight}
+                  testID={`boss-footer-edit-${field}`}
+                />
+                <Text style={styles.agreementCharCount}>
+                  {footerEditText.length} karakter
+                </Text>
+                <View style={styles.agreementActions}>
+                  <TouchableOpacity
+                    style={styles.agreementResetBtn}
+                    onPress={() => {
+                      showAlert("Varsayilana Don", `${BOSS_FOOTER_FIELD_LABELS[field]} varsayilan haline dondurmek istediginize emin misiniz?`, [
+                        { text: "Iptal", style: "cancel" },
+                        {
+                          text: "Sifirla",
+                          style: "destructive",
+                          onPress: () => {
+                            const defaultVal = DEFAULT_FOOTER_CONTENT[field];
+                            const updated = { ...footerContent, [field]: defaultVal };
+                            updateSettings({ footerContent: updated });
+                            setFooterEditText(defaultVal);
+                            showAlert("Sifirlandi", `${BOSS_FOOTER_FIELD_LABELS[field]} varsayilan haline dondu.`);
+                          },
+                        },
+                      ]);
+                    }}
+                  >
+                    <RotateCcw size={14} color="#EF4444" />
+                    <Text style={styles.agreementResetText}>Varsayilana Don</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.agreementCancelBtn}
+                    onPress={() => setExpandedFooterField(null)}
+                  >
+                    <Text style={styles.agreementCancelText}>Iptal</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={[styles.saveBtn, { backgroundColor: color }, !footerEditText.trim() && { opacity: 0.5 }]}
+                  onPress={() => {
+                    if (!footerEditText.trim()) {
+                      showAlert("Hata", "Icerik bos olamaz.");
+                      return;
+                    }
+                    const updated = { ...footerContent, [field]: footerEditText.trim() };
+                    updateSettings({ footerContent: updated });
+                    if (Platform.OS !== "web") {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    }
+                    showAlert("Kaydedildi", `${BOSS_FOOTER_FIELD_LABELS[field]} basariyla guncellendi.`);
+                    setExpandedFooterField(null);
+                  }}
+                  disabled={!footerEditText.trim()}
+                  testID={`boss-footer-save-${field}`}
+                >
+                  <FileText size={18} color={Colors.white} />
+                  <Text style={styles.saveBtnText}>Kaydet</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        );
+      })}
+
       <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
+
+const BOSS_FOOTER_FIELD_LABELS: Record<keyof FooterContent, string> = {
+  userAgreement: "Kullanici Sozlesmesi",
+  privacyPolicy: "Gizlilik Politikasi",
+  kvkk: "KVKK Aydinlatma Metni",
+  cookiePolicy: "Cerez Politikasi",
+  contactInfo: "Iletisim",
+  faq: "Sikca Sorulan Sorular",
+  copyright: "Telif Hakki Metni",
+};
+
+const BOSS_FOOTER_FIELD_COLORS: Record<keyof FooterContent, string> = {
+  userAgreement: "#3B82F6",
+  privacyPolicy: "#8B5CF6",
+  kvkk: "#EF4444",
+  cookiePolicy: "#F59E0B",
+  contactInfo: "#22C55E",
+  faq: "#06B6D4",
+  copyright: "#6366F1",
+};
 
 function MessagesTab() {
   const { sendMessageToAll, sendMessageToStoreOwners, sendMessageToCustomers } = useAdmin();
@@ -1472,6 +1614,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600" as const,
     color: "#64748B",
+  },
+  footerFieldHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 10,
+    paddingVertical: 4,
+  },
+  footerFieldDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  footerFieldLabel: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "700" as const,
+    color: "#1E293B",
+  },
+  footerFieldPreview: {
+    fontSize: 13,
+    color: "#94A3B8",
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  footerFieldEditor: {
+    marginTop: 12,
   },
   forgotBtn: {
     alignSelf: "flex-end" as const,
