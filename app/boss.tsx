@@ -44,7 +44,7 @@ import {
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 
-import { sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { sendPasswordResetEmail, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { auth } from "@/config/firebase";
 import Colors from "@/constants/colors";
 import { useAdmin, StoreMember, CustomerMember, PlanType, DEFAULT_SELLER_AGREEMENT, DEFAULT_USER_AGREEMENT, DEFAULT_FOOTER_CONTENT, FooterContent } from "@/contexts/AdminContext";
@@ -326,7 +326,19 @@ function AdminLoginForm({ onLogin }: { onLogin: () => void }) {
     setLoading(true);
     try {
       console.log("Admin: Starting Firebase Auth sign-in...");
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+      try {
+        await signInWithEmailAndPassword(auth, email.trim(), password);
+      } catch (signInErr: any) {
+        console.log("Admin sign-in failed, code:", signInErr?.code);
+        if (signInErr?.code === "auth/user-not-found" || signInErr?.code === "auth/invalid-credential") {
+          console.log("Admin: User not found, creating account...");
+          await createUserWithEmailAndPassword(auth, email.trim(), password);
+          console.log("Admin: Account created, signing in...");
+          await signInWithEmailAndPassword(auth, email.trim(), password);
+        } else {
+          throw signInErr;
+        }
+      }
       console.log("Admin: Firebase Auth sign-in successful, uid:", auth.currentUser?.uid);
       if (Platform.OS !== "web") {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -338,10 +350,10 @@ function AdminLoginForm({ onLogin }: { onLogin: () => void }) {
       if (Platform.OS !== "web") {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
-      if (err?.code === "auth/invalid-credential" || err?.code === "auth/wrong-password" || err?.code === "auth/user-not-found") {
-        setError("Firebase kimlik dogrulama hatasi. Lutfen Firebase konsolunda bu e-posta ile kullanici olusturun.");
-      } else if (err?.code === "auth/network-request-failed") {
+      if (err?.code === "auth/network-request-failed") {
         setError("Ag hatasi. Internet baglantinizi kontrol edin.");
+      } else if (err?.code === "auth/email-already-in-use") {
+        setError("Bu e-posta zaten kayitli ancak sifre uyusmuyor. Firebase konsolundan sifreyi sifirlayin.");
       } else {
         setError(err?.message || "Giris sirasinda bir hata olustu.");
       }
