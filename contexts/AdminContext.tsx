@@ -293,7 +293,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       console.log("Admin: Loaded", allUsers.length, "users from Firestore");
       return allUsers;
     },
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   });
 
   const realStoresQuery = useQuery({
@@ -304,7 +304,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       console.log("Admin: Loaded", allStores.length, "stores from Firestore");
       return allStores;
     },
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   });
 
   const registryUsersQuery = useQuery({
@@ -315,7 +315,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       console.log("Admin: Loaded", registryUsers.length, "registry users");
       return registryUsers;
     },
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   });
 
   const registryStoresQuery = useQuery({
@@ -326,7 +326,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       console.log("Admin: Loaded", registryStores.length, "registry stores");
       return registryStores;
     },
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   });
 
   const settingsQuery = useQuery({
@@ -356,32 +356,35 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     },
   });
 
-  const hasTriggeredBackfillRef = useRef<boolean>(false);
+  const lastBackfillSignatureRef = useRef<string>("");
 
   useEffect(() => {
     const sourceUsers = realUsersQuery.data ?? [];
     const sourceStores = realStoresQuery.data ?? [];
-    const registryUsers = registryUsersQuery.data ?? [];
-    const registryStores = registryStoresQuery.data ?? [];
     const hasSourceData = sourceUsers.length > 0 || sourceStores.length > 0;
-    const registryIsEmpty = registryUsers.length === 0 && registryStores.length === 0;
 
-    if (!hasSourceData || !registryIsEmpty || hasTriggeredBackfillRef.current) {
+    if (!hasSourceData) {
       return;
     }
 
-    hasTriggeredBackfillRef.current = true;
+    const backfillSignature = `${sourceUsers.length}_${sourceStores.length}`;
+    if (lastBackfillSignatureRef.current === backfillSignature) {
+      return;
+    }
 
+    lastBackfillSignatureRef.current = backfillSignature;
+
+    console.log("Admin: Running registry backfill for", sourceUsers.length, "users,", sourceStores.length, "stores");
     void backfillAdminRegistry()
       .then((result) => {
-        console.log("Admin: Initial registry backfill completed", result);
+        console.log("Admin: Registry backfill completed", result);
         void queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] });
         void queryClient.invalidateQueries({ queryKey: ["adminRegistryStores"] });
       })
       .catch((error) => {
-        console.log("Admin: Initial registry backfill failed", error);
+        console.log("Admin: Registry backfill failed", error);
       });
-  }, [realUsersQuery.data, realStoresQuery.data, registryUsersQuery.data, registryStoresQuery.data, queryClient]);
+  }, [realUsersQuery.data, realStoresQuery.data, queryClient]);
 
   useEffect(() => {
     const allUsers = realUsersQuery.data ?? [];
@@ -651,17 +654,18 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
   );
 
   const refreshData = useCallback(() => {
+    lastBackfillSignatureRef.current = "";
+    void queryClient.invalidateQueries({ queryKey: ["adminAllUsers"] });
+    void queryClient.invalidateQueries({ queryKey: ["adminAllStores"] });
     void backfillAdminRegistry()
       .then((result) => {
         console.log("Admin: Manual registry backfill completed", result);
+        void queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] });
+        void queryClient.invalidateQueries({ queryKey: ["adminRegistryStores"] });
       })
       .catch((error) => {
         console.log("Admin: Manual registry backfill failed", error);
       });
-    void queryClient.invalidateQueries({ queryKey: ["adminAllUsers"] });
-    void queryClient.invalidateQueries({ queryKey: ["adminAllStores"] });
-    void queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] });
-    void queryClient.invalidateQueries({ queryKey: ["adminRegistryStores"] });
     console.log("Admin: Data refresh triggered");
   }, [queryClient]);
 
