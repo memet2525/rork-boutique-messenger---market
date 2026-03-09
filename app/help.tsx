@@ -6,15 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   Animated,
-  Linking,
 } from "react-native";
 import { Stack } from "expo-router";
-import {
-  ChevronDown,
-  Mail,
-  Phone,
-  ExternalLink,
-} from "lucide-react-native";
+import { ChevronDown } from "lucide-react-native";
 
 import Colors from "@/constants/colors";
 
@@ -102,40 +96,7 @@ export default function HelpScreen() {
           ))}
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Bize Ulaşın</Text>
-          <TouchableOpacity
-            style={styles.contactRow}
-            onPress={() => Linking.openURL("mailto:destek@butikpazar.com")}
-          >
-            <View style={[styles.contactIcon, { backgroundColor: "#3B82F615" }]}>
-              <Mail size={20} color="#3B82F6" />
-            </View>
-            <View style={styles.contactText}>
-              <Text style={styles.contactLabel}>E-posta</Text>
-              <Text style={styles.contactValue}>destek@butikpazar.com</Text>
-            </View>
-            <ExternalLink size={16} color={Colors.textLight} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.contactRow}
-            onPress={() => Linking.openURL("tel:+908501234567")}
-          >
-            <View style={[styles.contactIcon, { backgroundColor: Colors.accent + "15" }]}>
-              <Phone size={20} color={Colors.accent} />
-            </View>
-            <View style={styles.contactText}>
-              <Text style={styles.contactLabel}>Telefon</Text>
-              <Text style={styles.contactValue}>0850 123 45 67</Text>
-            </View>
-            <ExternalLink size={16} color={Colors.textLight} />
-          </TouchableOpacity>
 
-        </View>
-
-        <Text style={styles.footerNote}>
-          Yanıt süresi genellikle 24 saat içindedir.
-        </Text>
       </ScrollView>
     </>
   );
@@ -187,41 +148,5 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 10,
   },
-  contactRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderTopWidth: 0.5,
-    borderTopColor: Colors.borderLight,
-    gap: 12,
-  },
-  contactIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  contactText: {
-    flex: 1,
-  },
-  contactLabel: {
-    fontSize: 15,
-    fontWeight: "500" as const,
-    color: Colors.text,
-  },
-  contactValue: {
-    fontSize: 13,
-    color: Colors.textLight,
-    marginTop: 1,
-  },
-  footerNote: {
-    fontSize: 12,
-    color: Colors.textLight,
-    textAlign: "center",
-    marginTop: 20,
-    marginHorizontal: 32,
-    marginBottom: 32,
-  },
+
 });
