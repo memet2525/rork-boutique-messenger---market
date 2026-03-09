@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import createContextHook from "@nkzw/create-context-hook";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/config/firebase";
 import {
   getAdminSettings,
   saveAdminSettings,
@@ -285,11 +287,30 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
   const [stores, setStores] = useState<StoreMember[]>([]);
   const [customers, setCustomers] = useState<CustomerMember[]>([]);
   const [settings, setSettings] = useState<AdminSettings>({ aiApiKey: "", aiProvider: "openai", sellerAgreement: DEFAULT_SELLER_AGREEMENT, userAgreement: DEFAULT_USER_AGREEMENT, footerContent: DEFAULT_FOOTER_CONTENT, siteName: "butikbiz" });
+  const [authReady, setAuthReady] = useState<boolean>(!!auth.currentUser);
+  const [authUid, setAuthUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      console.log("AdminContext: Auth state changed:", user?.uid ?? "signed out");
+      setAuthUid(user?.uid ?? null);
+      setAuthReady(true);
+      if (user) {
+        void queryClient.invalidateQueries({ queryKey: ["adminAllUsers"] });
+        void queryClient.invalidateQueries({ queryKey: ["adminAllStores"] });
+        void queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] });
+        void queryClient.invalidateQueries({ queryKey: ["adminRegistryStores"] });
+      }
+    });
+    return unsubscribe;
+  }, [queryClient]);
+
+  const isAuthenticated = authReady && !!authUid;
 
   const realUsersQuery = useQuery({
-    queryKey: ["adminAllUsers"],
+    queryKey: ["adminAllUsers", authUid],
     queryFn: async () => {
-      console.log("Admin: Loading all users from Firestore...");
+      console.log("Admin: Loading all users from Firestore... authUid:", authUid);
       const allUsers = await getAllUsers();
       console.log("Admin: Loaded", allUsers.length, "users from Firestore");
       if (allUsers.length > 0) {
@@ -298,45 +319,49 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       }
       return allUsers;
     },
+    enabled: isAuthenticated,
     refetchInterval: 10000,
     retry: 3,
     retryDelay: 2000,
   });
 
   const realStoresQuery = useQuery({
-    queryKey: ["adminAllStores"],
+    queryKey: ["adminAllStores", authUid],
     queryFn: async () => {
       console.log("Admin: Loading all stores from Firestore...");
       const allStores = await getFirestoreStores();
       console.log("Admin: Loaded", allStores.length, "stores from Firestore");
       return allStores;
     },
+    enabled: isAuthenticated,
     refetchInterval: 10000,
     retry: 3,
     retryDelay: 2000,
   });
 
   const registryUsersQuery = useQuery({
-    queryKey: ["adminRegistryUsers"],
+    queryKey: ["adminRegistryUsers", authUid],
     queryFn: async () => {
       console.log("Admin: Loading admin registry users...");
       const registryUsers = await getAdminRegistryMembers();
       console.log("Admin: Loaded", registryUsers.length, "registry users");
       return registryUsers;
     },
+    enabled: isAuthenticated,
     refetchInterval: 10000,
     retry: 3,
     retryDelay: 2000,
   });
 
   const registryStoresQuery = useQuery({
-    queryKey: ["adminRegistryStores"],
+    queryKey: ["adminRegistryStores", authUid],
     queryFn: async () => {
       console.log("Admin: Loading admin registry stores...");
       const registryStores = await getAdminRegistryStores();
       console.log("Admin: Loaded", registryStores.length, "registry stores");
       return registryStores;
     },
+    enabled: isAuthenticated,
     refetchInterval: 10000,
     retry: 3,
     retryDelay: 2000,
@@ -371,18 +396,38 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
   });
 
   const lastBackfillSignatureRef = useRef<string>("");
+  const backfillTriggeredRef = useRef<boolean>(false);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+
+    if (!backfillTriggeredRef.current) {
+      backfillTriggeredRef.current = true;
+      console.log("Admin: Running initial backfill on auth ready");
+      void backfillAdminRegistry()
+        .then((result) => {
+          console.log("Admin: Initial backfill completed", result);
+          void queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] });
+          void queryClient.invalidateQueries({ queryKey: ["adminRegistryStores"] });
+        })
+        .catch((error) => {
+          console.log("Admin: Initial backfill failed", error);
+        });
+    }
+  }, [isAuthenticated, queryClient]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
     const sourceUsers = realUsersQuery.data ?? [];
     const sourceStores = realStoresQuery.data ?? [];
-    const hasSourceData = sourceUsers.length > 0 || sourceStores.length > 0;
-
-    if (!hasSourceData) {
-      return;
-    }
 
     const backfillSignature = `${sourceUsers.length}_${sourceStores.length}`;
     if (lastBackfillSignatureRef.current === backfillSignature) {
+      return;
+    }
+
+    if (sourceUsers.length === 0 && sourceStores.length === 0) {
       return;
     }
 
@@ -398,7 +443,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
       .catch((error) => {
         console.log("Admin: Registry backfill failed", error);
       });
-  }, [realUsersQuery.data, realStoresQuery.data, queryClient]);
+  }, [isAuthenticated, realUsersQuery.data, realStoresQuery.data, queryClient]);
 
   useEffect(() => {
     const allUsers = realUsersQuery.data ?? [];
@@ -406,7 +451,12 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     const registryUsers = registryUsersQuery.data ?? [];
     const registryStores = registryStoresQuery.data ?? [];
 
-    console.log("Admin merge: allUsers=", allUsers.length, "allStores=", allStores.length, "regUsers=", registryUsers.length, "regStores=", registryStores.length);
+    console.log("Admin merge: allUsers=", allUsers.length, "allStores=", allStores.length, "regUsers=", registryUsers.length, "regStores=", registryStores.length, "authReady=", isAuthenticated);
+
+    if (!isAuthenticated) {
+      console.log("Admin merge: Auth not ready, skipping merge");
+      return;
+    }
 
     const mergedUserMap = new Map<string, Record<string, any>>();
     const mergedStoreMap = new Map<string, Record<string, any>>();
@@ -539,7 +589,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     console.log("Admin: Final mapped", storeMembers.length, "stores,", customerMembers.length, "customers, storeOwnerIds:", Array.from(storeOwnerIds).join(","));
     setStores(storeMembers);
     setCustomers(customerMembers);
-  }, [realUsersQuery.data, realStoresQuery.data, registryUsersQuery.data, registryStoresQuery.data, queryClient]);
+  }, [isAuthenticated, realUsersQuery.data, realStoresQuery.data, registryUsersQuery.data, registryStoresQuery.data]);
 
   useEffect(() => {
     if (settingsQuery.data) {
@@ -682,8 +732,11 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
 
   const refreshData = useCallback(() => {
     lastBackfillSignatureRef.current = "";
+    backfillTriggeredRef.current = false;
     void queryClient.invalidateQueries({ queryKey: ["adminAllUsers"] });
     void queryClient.invalidateQueries({ queryKey: ["adminAllStores"] });
+    void queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] });
+    void queryClient.invalidateQueries({ queryKey: ["adminRegistryStores"] });
     void backfillAdminRegistry()
       .then((result) => {
         console.log("Admin: Manual registry backfill completed", result);
