@@ -101,8 +101,7 @@ service cloud.firestore {
     }
 
     function validAddressCreate(addressId) {
-      return isSignedIn()
-        && request.resource.data.id == addressId
+      return request.resource.data.id == addressId
         && request.resource.data.storeId is string
         && request.resource.data.customerName is string
         && request.resource.data.customerName.size() >= 2
