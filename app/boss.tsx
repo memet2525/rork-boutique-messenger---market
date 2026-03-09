@@ -504,6 +504,7 @@ function AdminLoginForm({ onLogin }: { onLogin: () => void }) {
 function SettingsTab() {
   const { settings, updateSettings } = useAdmin();
   const { showAlert } = useAlert();
+  const [siteName, setSiteName] = useState<string>(settings.siteName || "butikbiz");
   const [apiKey, setApiKey] = useState<string>(settings.aiApiKey);
   const [provider, setProvider] = useState<string>(settings.aiProvider);
   const [agreementText, setAgreementText] = useState<string>(settings.sellerAgreement);
@@ -579,6 +580,45 @@ function SettingsTab() {
   return (
     <ScrollView style={styles.settingsContainer} showsVerticalScrollIndicator={false}>
       <View style={styles.settingsCard}>
+        <View style={styles.settingsHeader}>
+          <Globe size={20} color="#3B82F6" />
+          <Text style={styles.settingsTitle}>Site Adi</Text>
+        </View>
+        <Text style={styles.settingsDesc}>
+          Ana sayfada gorunen site adini buradan degistirebilirsiniz.
+        </Text>
+        <Text style={styles.settingsLabel}>Site Adi</Text>
+        <TextInput
+          style={styles.settingsInput}
+          placeholder="Site adini girin"
+          placeholderTextColor={Colors.textLight}
+          value={siteName}
+          onChangeText={setSiteName}
+          autoCapitalize="none"
+          testID="boss-site-name-input"
+        />
+        <TouchableOpacity
+          style={[styles.saveBtn, { backgroundColor: "#22C55E" }, !siteName.trim() && { opacity: 0.5 }]}
+          onPress={() => {
+            if (!siteName.trim()) {
+              showAlert("Hata", "Site adi bos olamaz.");
+              return;
+            }
+            updateSettings({ siteName: siteName.trim() });
+            if (Platform.OS !== "web") {
+              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+            showAlert("Kaydedildi", "Site adi basariyla guncellendi.");
+          }}
+          disabled={!siteName.trim()}
+          testID="boss-save-site-name"
+        >
+          <Globe size={18} color={Colors.white} />
+          <Text style={styles.saveBtnText}>Site Adini Kaydet</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={[styles.settingsCard, { marginTop: 16 }]}>
         <View style={styles.settingsHeader}>
           <Key size={20} color={Colors.primary} />
           <Text style={styles.settingsTitle}>AI Otomatik Yanit Ayarlari</Text>
