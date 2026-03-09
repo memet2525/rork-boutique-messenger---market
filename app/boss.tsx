@@ -41,7 +41,7 @@ import {
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 
-import { sendPasswordResetEmail } from "firebase/auth";
+import { sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { auth } from "@/config/firebase";
 import Colors from "@/constants/colors";
 import { useAdmin, StoreMember, CustomerMember, PlanType, DEFAULT_SELLER_AGREEMENT, DEFAULT_USER_AGREEMENT, DEFAULT_FOOTER_CONTENT, FooterContent } from "@/contexts/AdminContext";
@@ -253,6 +253,7 @@ function AdminLoginForm({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState<string>("");
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
   const [resetMode, setResetMode] = useState<boolean>(false);
   const [resetSent, setResetSent] = useState<boolean>(false);
   const shakeAnim = useRef(new Animated.Value(0)).current;
@@ -271,19 +272,33 @@ function AdminLoginForm({ onLogin }: { onLogin: () => void }) {
     ]).start();
   }, [shakeAnim]);
 
-  const handleSubmit = useCallback(() => {
-    if (email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase() && password === ADMIN_PASSWORD) {
-      if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-      setError("");
-      onLogin();
-    } else {
+  const handleSubmit = useCallback(async () => {
+    if (email.trim().toLowerCase() !== ADMIN_EMAIL.toLowerCase() || password !== ADMIN_PASSWORD) {
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
       setError("E-posta veya sifre hatali!");
       triggerShake();
+      return;
+    }
+    setLoading(true);
+    try {
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      console.log("Admin Firebase Auth sign-in successful");
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      setError("");
+      onLogin();
+    } catch (err: any) {
+      console.log("Admin Firebase Auth sign-in error:", err?.code, err?.message);
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+      setError("Firebase oturum acma hatasi: " + (err?.message || "Bilinmeyen hata"));
+      triggerShake();
+    } finally {
+      setLoading(false);
     }
   }, [email, password, onLogin, triggerShake]);
 
@@ -418,13 +433,13 @@ function AdminLoginForm({ onLogin }: { onLogin: () => void }) {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.loginButton, (!email.trim() || !password) && styles.loginButtonDisabled]}
+          style={[styles.loginButton, (!email.trim() || !password || loading) && styles.loginButtonDisabled]}
           onPress={handleSubmit}
-          disabled={!email.trim() || !password}
+          disabled={!email.trim() || !password || loading}
           testID="admin-login-btn"
         >
           <Lock size={18} color={Colors.white} />
-          <Text style={styles.loginButtonText}>Giris Yap</Text>
+          <Text style={styles.loginButtonText}>{loading ? "Giris yapiliyor..." : "Giris Yap"}</Text>
         </TouchableOpacity>
       </Animated.View>
     </Animated.View>
@@ -1082,7 +1097,10 @@ export default function BossScreen() {
         }}
       />
       {authenticated ? (
-        <AdminDashboard onLogout={() => setAuthenticated(false)} />
+        <AdminDashboard onLogout={() => {
+          signOut(auth).catch((err) => console.log("Admin sign-out error:", err));
+          setAuthenticated(false);
+        }} />
       ) : (
         <AdminLoginForm onLogin={() => setAuthenticated(true)} />
       )}
