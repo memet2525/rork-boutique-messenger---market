@@ -44,7 +44,7 @@ import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { useAdmin, StoreMember, CustomerMember, PlanType, DEFAULT_SELLER_AGREEMENT, DEFAULT_USER_AGREEMENT, DEFAULT_FOOTER_CONTENT, FooterContent } from "@/contexts/AdminContext";
 
-type TabType = "stores" | "customers" | "settings" | "messages" | "footer";
+type TabType = "stores" | "customers" | "settings" | "messages";
 import { useAlert } from "@/contexts/AlertContext";
 
 function StoreCard({
@@ -329,6 +329,10 @@ function SettingsTab() {
   const [showAgreementEditor, setShowAgreementEditor] = useState<boolean>(false);
   const [userAgreementText, setUserAgreementText] = useState<string>(settings.userAgreement);
   const [showUserAgreementEditor, setShowUserAgreementEditor] = useState<boolean>(false);
+  const [expandedFooterField, setExpandedFooterField] = useState<keyof FooterContent | null>(null);
+  const [footerEditText, setFooterEditText] = useState<string>("");
+
+  const footerContent = settings.footerContent || DEFAULT_FOOTER_CONTENT;
 
   const handleSave = useCallback(() => {
     updateSettings({ aiApiKey: apiKey, aiProvider: provider });
@@ -581,6 +585,121 @@ function SettingsTab() {
         )}
       </View>
 
+      <View style={[styles.settingsCard, { marginTop: 16 }]}>
+        <View style={styles.settingsHeader}>
+          <Globe size={20} color={Colors.primary} />
+          <Text style={styles.settingsTitle}>Footer Icerik Yonetimi</Text>
+        </View>
+        <Text style={styles.settingsDesc}>
+          Ana sayfanin altinda gorunen yasal metinleri ve bilgileri buradan duzenleyebilirsiniz.
+        </Text>
+      </View>
+
+      {(Object.keys(FOOTER_FIELD_LABELS) as (keyof FooterContent)[]).map((field) => {
+        const isExpanded = expandedFooterField === field;
+        const color = FOOTER_FIELD_COLORS[field];
+        return (
+          <View key={field} style={[styles.settingsCard, { marginTop: 12 }]}>
+            <TouchableOpacity
+              style={styles.footerFieldHeader}
+              onPress={() => {
+                if (expandedFooterField === field) {
+                  setExpandedFooterField(null);
+                  return;
+                }
+                setExpandedFooterField(field);
+                setFooterEditText(footerContent[field]);
+              }}
+              activeOpacity={0.7}
+              testID={`settings-footer-field-${field}`}
+            >
+              <View style={[styles.footerFieldDot, { backgroundColor: color }]} />
+              <Text style={styles.footerFieldLabel}>{FOOTER_FIELD_LABELS[field]}</Text>
+              {isExpanded ? (
+                <ChevronUp size={18} color={Colors.textSecondary} />
+              ) : (
+                <ChevronDown size={18} color={Colors.textSecondary} />
+              )}
+            </TouchableOpacity>
+
+            {!isExpanded && (
+              <Text style={styles.footerFieldPreview} numberOfLines={2}>
+                {footerContent[field]}
+              </Text>
+            )}
+
+            {isExpanded && (
+              <View style={styles.footerFieldEditor}>
+                <TextInput
+                  style={styles.agreementTextInput}
+                  value={footerEditText}
+                  onChangeText={setFooterEditText}
+                  multiline
+                  textAlignVertical="top"
+                  placeholder={`${FOOTER_FIELD_LABELS[field]} metnini girin...`}
+                  placeholderTextColor={Colors.textLight}
+                  testID={`settings-footer-edit-${field}`}
+                />
+                <Text style={styles.agreementCharCount}>
+                  {footerEditText.length} karakter
+                </Text>
+                <View style={styles.agreementActions}>
+                  <TouchableOpacity
+                    style={styles.agreementResetBtn}
+                    onPress={() => {
+                      showAlert("Varsayilana Don", `${FOOTER_FIELD_LABELS[field]} varsayilan haline dondurmek istediginize emin misiniz?`, [
+                        { text: "Iptal", style: "cancel" },
+                        {
+                          text: "Sifirla",
+                          style: "destructive",
+                          onPress: () => {
+                            const defaultVal = DEFAULT_FOOTER_CONTENT[field];
+                            const updated = { ...footerContent, [field]: defaultVal };
+                            updateSettings({ footerContent: updated });
+                            setFooterEditText(defaultVal);
+                            showAlert("Sifirlandi", `${FOOTER_FIELD_LABELS[field]} varsayilan haline dondu.`);
+                          },
+                        },
+                      ]);
+                    }}
+                  >
+                    <RotateCcw size={14} color="#EF4444" />
+                    <Text style={styles.agreementResetText}>Varsayilana Don</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.agreementCancelBtn}
+                    onPress={() => setExpandedFooterField(null)}
+                  >
+                    <Text style={styles.agreementCancelText}>Iptal</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={[styles.saveBtn, { backgroundColor: color }, !footerEditText.trim() && { opacity: 0.5 }]}
+                  onPress={() => {
+                    if (!footerEditText.trim()) {
+                      showAlert("Hata", "Icerik bos olamaz.");
+                      return;
+                    }
+                    const updated = { ...footerContent, [field]: footerEditText.trim() };
+                    updateSettings({ footerContent: updated });
+                    if (Platform.OS !== "web") {
+                      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    }
+                    showAlert("Kaydedildi", `${FOOTER_FIELD_LABELS[field]} basariyla guncellendi.`);
+                    setExpandedFooterField(null);
+                  }}
+                  disabled={!footerEditText.trim()}
+                  testID={`settings-footer-save-${field}`}
+                >
+                  <FileText size={18} color={Colors.white} />
+                  <Text style={styles.saveBtnText}>Kaydet</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        );
+      })}
+
       <View style={{ height: 40 }} />
     </ScrollView>
   );
@@ -605,144 +724,6 @@ const FOOTER_FIELD_COLORS: Record<keyof FooterContent, string> = {
   faq: "#06B6D4",
   copyright: "#6366F1",
 };
-
-function FooterTab() {
-  const { settings, updateSettings } = useAdmin();
-  const { showAlert } = useAlert();
-  const [expandedField, setExpandedField] = useState<keyof FooterContent | null>(null);
-  const [editText, setEditText] = useState<string>("");
-
-  const footerContent = settings.footerContent || DEFAULT_FOOTER_CONTENT;
-
-  const handleExpand = useCallback((field: keyof FooterContent) => {
-    if (expandedField === field) {
-      setExpandedField(null);
-      return;
-    }
-    setExpandedField(field);
-    setEditText(footerContent[field]);
-  }, [expandedField, footerContent]);
-
-  const handleSave = useCallback((field: keyof FooterContent) => {
-    if (!editText.trim()) {
-      showAlert("Hata", "Icerik bos olamaz.");
-      return;
-    }
-    const updated = { ...footerContent, [field]: editText.trim() };
-    updateSettings({ footerContent: updated });
-    if (Platform.OS !== "web") {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-    showAlert("Kaydedildi", `${FOOTER_FIELD_LABELS[field]} basariyla guncellendi.`);
-    setExpandedField(null);
-  }, [editText, footerContent, updateSettings, showAlert]);
-
-  const handleReset = useCallback((field: keyof FooterContent) => {
-    showAlert("Varsayilana Don", `${FOOTER_FIELD_LABELS[field]} varsayilan haline dondurmek istediginize emin misiniz?`, [
-      { text: "Iptal", style: "cancel" },
-      {
-        text: "Sifirla",
-        style: "destructive",
-        onPress: () => {
-          const defaultVal = DEFAULT_FOOTER_CONTENT[field];
-          const updated = { ...footerContent, [field]: defaultVal };
-          updateSettings({ footerContent: updated });
-          setEditText(defaultVal);
-          showAlert("Sifirlandi", `${FOOTER_FIELD_LABELS[field]} varsayilan haline dondu.`);
-        },
-      },
-    ]);
-  }, [footerContent, updateSettings, showAlert]);
-
-  const fields = Object.keys(FOOTER_FIELD_LABELS) as (keyof FooterContent)[];
-
-  return (
-    <ScrollView style={styles.settingsContainer} showsVerticalScrollIndicator={false}>
-      <View style={styles.settingsCard}>
-        <View style={styles.settingsHeader}>
-          <Globe size={20} color={Colors.primary} />
-          <Text style={styles.settingsTitle}>Footer Icerik Yonetimi</Text>
-        </View>
-        <Text style={styles.settingsDesc}>
-          Ana sayfanin altinda gorunen yasal metinleri ve bilgileri buradan duzenleyebilirsiniz.
-        </Text>
-      </View>
-
-      {fields.map((field) => {
-        const isExpanded = expandedField === field;
-        const color = FOOTER_FIELD_COLORS[field];
-        return (
-          <View key={field} style={[styles.settingsCard, { marginTop: 12 }]}> 
-            <TouchableOpacity
-              style={styles.footerFieldHeader}
-              onPress={() => handleExpand(field)}
-              activeOpacity={0.7}
-              testID={`footer-field-${field}`}
-            >
-              <View style={[styles.footerFieldDot, { backgroundColor: color }]} />
-              <Text style={styles.footerFieldLabel}>{FOOTER_FIELD_LABELS[field]}</Text>
-              {isExpanded ? (
-                <ChevronUp size={18} color={Colors.textSecondary} />
-              ) : (
-                <ChevronDown size={18} color={Colors.textSecondary} />
-              )}
-            </TouchableOpacity>
-
-            {!isExpanded && (
-              <Text style={styles.footerFieldPreview} numberOfLines={2}>
-                {footerContent[field]}
-              </Text>
-            )}
-
-            {isExpanded && (
-              <View style={styles.footerFieldEditor}>
-                <TextInput
-                  style={styles.agreementTextInput}
-                  value={editText}
-                  onChangeText={setEditText}
-                  multiline
-                  textAlignVertical="top"
-                  placeholder={`${FOOTER_FIELD_LABELS[field]} metnini girin...`}
-                  placeholderTextColor={Colors.textLight}
-                  testID={`footer-edit-${field}`}
-                />
-                <Text style={styles.agreementCharCount}>
-                  {editText.length} karakter
-                </Text>
-                <View style={styles.agreementActions}>
-                  <TouchableOpacity
-                    style={styles.agreementResetBtn}
-                    onPress={() => handleReset(field)}
-                  >
-                    <RotateCcw size={14} color="#EF4444" />
-                    <Text style={styles.agreementResetText}>Varsayilana Don</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.agreementCancelBtn}
-                    onPress={() => setExpandedField(null)}
-                  >
-                    <Text style={styles.agreementCancelText}>Iptal</Text>
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity
-                  style={[styles.saveBtn, { backgroundColor: color }, !editText.trim() && { opacity: 0.5 }]}
-                  onPress={() => handleSave(field)}
-                  disabled={!editText.trim()}
-                  testID={`footer-save-${field}`}
-                >
-                  <FileText size={18} color={Colors.white} />
-                  <Text style={styles.saveBtnText}>Kaydet</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        );
-      })}
-
-      <View style={{ height: 40 }} />
-    </ScrollView>
-  );
-}
 
 function MessagesTab() {
   const { sendMessageToAll, sendMessageToStoreOwners, sendMessageToCustomers } = useAdmin();
@@ -962,16 +943,6 @@ export default function AdminScreen() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tab, activeTab === "footer" && styles.tabActive]}
-            onPress={() => switchTab("footer")}
-            testID="tab-footer"
-          >
-            <Globe size={16} color={activeTab === "footer" ? Colors.primary : Colors.textSecondary} />
-            <Text style={[styles.tabText, activeTab === "footer" && styles.tabTextActive]}>
-              Footer
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
             style={[styles.tab, activeTab === "settings" && styles.tabActive]}
             onPress={() => switchTab("settings")}
             testID="tab-settings"
@@ -986,8 +957,6 @@ export default function AdminScreen() {
 
       {activeTab === "settings" ? (
         <SettingsTab />
-      ) : activeTab === "footer" ? (
-        <FooterTab />
       ) : activeTab === "messages" ? (
         <MessagesTab />
       ) : isLoading ? (
