@@ -293,13 +293,17 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       console.log("AdminContext: Auth state changed:", user?.uid ?? "signed out");
-      setAuthUid(user?.uid ?? null);
+      const newUid = user?.uid ?? null;
+      setAuthUid(newUid);
       setAuthReady(true);
       if (user) {
-        void queryClient.invalidateQueries({ queryKey: ["adminAllUsers"] });
-        void queryClient.invalidateQueries({ queryKey: ["adminAllStores"] });
-        void queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] });
-        void queryClient.invalidateQueries({ queryKey: ["adminRegistryStores"] });
+        setTimeout(() => {
+          console.log("AdminContext: Invalidating all admin queries for uid:", newUid);
+          void queryClient.invalidateQueries({ queryKey: ["adminAllUsers"] });
+          void queryClient.invalidateQueries({ queryKey: ["adminAllStores"] });
+          void queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] });
+          void queryClient.invalidateQueries({ queryKey: ["adminRegistryStores"] });
+        }, 500);
       }
     });
     return unsubscribe;
@@ -308,9 +312,13 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
   const isAuthenticated = authReady && !!authUid;
 
   const realUsersQuery = useQuery({
-    queryKey: ["adminAllUsers", authUid],
+    queryKey: ["adminAllUsers", authUid ?? "none"],
     queryFn: async () => {
       console.log("Admin: Loading all users from Firestore... authUid:", authUid);
+      if (!auth.currentUser) {
+        console.log("Admin: No current user in auth, waiting...");
+        return [];
+      }
       const allUsers = await getAllUsers();
       console.log("Admin: Loaded", allUsers.length, "users from Firestore");
       if (allUsers.length > 0) {
@@ -323,12 +331,17 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     refetchInterval: 10000,
     retry: 3,
     retryDelay: 2000,
+    staleTime: 0,
   });
 
   const realStoresQuery = useQuery({
-    queryKey: ["adminAllStores", authUid],
+    queryKey: ["adminAllStores", authUid ?? "none"],
     queryFn: async () => {
       console.log("Admin: Loading all stores from Firestore...");
+      if (!auth.currentUser) {
+        console.log("Admin: No current user in auth for stores, waiting...");
+        return [];
+      }
       const allStores = await getFirestoreStores();
       console.log("Admin: Loaded", allStores.length, "stores from Firestore");
       return allStores;
@@ -337,12 +350,17 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     refetchInterval: 10000,
     retry: 3,
     retryDelay: 2000,
+    staleTime: 0,
   });
 
   const registryUsersQuery = useQuery({
-    queryKey: ["adminRegistryUsers", authUid],
+    queryKey: ["adminRegistryUsers", authUid ?? "none"],
     queryFn: async () => {
       console.log("Admin: Loading admin registry users...");
+      if (!auth.currentUser) {
+        console.log("Admin: No current user for registry users, waiting...");
+        return [];
+      }
       const registryUsers = await getAdminRegistryMembers();
       console.log("Admin: Loaded", registryUsers.length, "registry users");
       return registryUsers;
@@ -351,12 +369,17 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     refetchInterval: 10000,
     retry: 3,
     retryDelay: 2000,
+    staleTime: 0,
   });
 
   const registryStoresQuery = useQuery({
-    queryKey: ["adminRegistryStores", authUid],
+    queryKey: ["adminRegistryStores", authUid ?? "none"],
     queryFn: async () => {
       console.log("Admin: Loading admin registry stores...");
+      if (!auth.currentUser) {
+        console.log("Admin: No current user for registry stores, waiting...");
+        return [];
+      }
       const registryStores = await getAdminRegistryStores();
       console.log("Admin: Loaded", registryStores.length, "registry stores");
       return registryStores;
@@ -365,6 +388,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
     refetchInterval: 10000,
     retry: 3,
     retryDelay: 2000,
+    staleTime: 0,
   });
 
   const settingsQuery = useQuery({
