@@ -21,7 +21,7 @@ import Colors from "@/constants/colors";
 import { stores, Store, Product } from "@/mocks/stores";
 import { useUser } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
-import { getFirestoreStores } from "@/services/firestore";
+import { getFirestoreStores, getAdminSettings } from "@/services/firestore";
 import Footer from "@/components/Footer";
 
 const CATEGORIES = ["Tümü", "Moda", "Teknoloji", "Gıda", "Dekorasyon", "Spor", "Butik", "Diğer"];
@@ -163,6 +163,17 @@ export default function MarketplaceScreen() {
     queryKey: ["firestoreStores"],
     queryFn: getFirestoreStores,
   });
+
+  const adminSettingsQuery = useQuery({
+    queryKey: ["adminSettings"],
+    queryFn: async () => {
+      const data = await getAdminSettings();
+      return data;
+    },
+    staleTime: 60000,
+  });
+
+  const displaySiteName = adminSettingsQuery.data?.siteName || "butikbiz";
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("Tümü");
@@ -255,7 +266,7 @@ export default function MarketplaceScreen() {
     <View style={styles.container}>
       <View style={[styles.topBarWrapper, { paddingTop: insets.top + 4 }]}>
         <View style={styles.topBarRow1}>
-          <Text style={styles.brandText}>butikbiz</Text>
+          <Text style={styles.brandText}>{displaySiteName}</Text>
           <View style={styles.topBarActions}>
             {Platform.OS === 'web' && !isStandalone && (
               <TouchableOpacity

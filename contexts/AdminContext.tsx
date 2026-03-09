@@ -71,6 +71,7 @@ export interface AdminSettings {
   sellerAgreement: string;
   userAgreement: string;
   footerContent: FooterContent;
+  siteName: string;
 }
 
 export const DEFAULT_USER_AGREEMENT = `KULLANICI SOZLESMESI
@@ -283,7 +284,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
   const queryClient = useQueryClient();
   const [stores, setStores] = useState<StoreMember[]>([]);
   const [customers, setCustomers] = useState<CustomerMember[]>([]);
-  const [settings, setSettings] = useState<AdminSettings>({ aiApiKey: "", aiProvider: "openai", sellerAgreement: DEFAULT_SELLER_AGREEMENT, userAgreement: DEFAULT_USER_AGREEMENT, footerContent: DEFAULT_FOOTER_CONTENT });
+  const [settings, setSettings] = useState<AdminSettings>({ aiApiKey: "", aiProvider: "openai", sellerAgreement: DEFAULT_SELLER_AGREEMENT, userAgreement: DEFAULT_USER_AGREEMENT, footerContent: DEFAULT_FOOTER_CONTENT, siteName: "butikbiz" });
 
   const realUsersQuery = useQuery({
     queryKey: ["adminAllUsers"],
@@ -352,9 +353,10 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
           sellerAgreement: data.sellerAgreement || DEFAULT_SELLER_AGREEMENT,
           userAgreement: data.userAgreement || DEFAULT_USER_AGREEMENT,
           footerContent: data.footerContent ? { ...DEFAULT_FOOTER_CONTENT, ...data.footerContent } : DEFAULT_FOOTER_CONTENT,
+          siteName: data.siteName || "butikbiz",
         } as AdminSettings;
       }
-      return { aiApiKey: "", aiProvider: "openai", sellerAgreement: DEFAULT_SELLER_AGREEMENT, userAgreement: DEFAULT_USER_AGREEMENT, footerContent: DEFAULT_FOOTER_CONTENT } as AdminSettings;
+      return { aiApiKey: "", aiProvider: "openai", sellerAgreement: DEFAULT_SELLER_AGREEMENT, userAgreement: DEFAULT_USER_AGREEMENT, footerContent: DEFAULT_FOOTER_CONTENT, siteName: "butikbiz" } as AdminSettings;
     },
   });
 

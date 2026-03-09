@@ -38,6 +38,7 @@ import {
   Globe,
   ChevronDown,
   ChevronUp,
+  Type,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 
@@ -331,8 +332,21 @@ function SettingsTab() {
   const [showUserAgreementEditor, setShowUserAgreementEditor] = useState<boolean>(false);
   const [expandedFooterField, setExpandedFooterField] = useState<keyof FooterContent | null>(null);
   const [footerEditText, setFooterEditText] = useState<string>("");
+  const [siteName, setSiteName] = useState<string>(settings.siteName || "butikbiz");
 
   const footerContent = settings.footerContent || DEFAULT_FOOTER_CONTENT;
+
+  const handleSaveSiteName = useCallback(() => {
+    if (!siteName.trim()) {
+      showAlert("Hata", "Site adi bos olamaz.");
+      return;
+    }
+    updateSettings({ siteName: siteName.trim() });
+    if (Platform.OS !== "web") {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    showAlert("Kaydedildi", "Site adi basariyla guncellendi.");
+  }, [siteName, updateSettings, showAlert]);
 
   const handleSave = useCallback(() => {
     updateSettings({ aiApiKey: apiKey, aiProvider: provider });
@@ -398,6 +412,37 @@ function SettingsTab() {
   return (
     <ScrollView style={styles.settingsContainer} showsVerticalScrollIndicator={false}>
       <View style={styles.settingsCard}>
+        <View style={styles.settingsHeader}>
+          <Type size={20} color="#22C55E" />
+          <Text style={styles.settingsTitle}>Site Adi</Text>
+        </View>
+        <Text style={styles.settingsDesc}>
+          Ana sayfada gorunen site adini buradan degistirebilirsiniz.
+        </Text>
+
+        <Text style={styles.settingsLabel}>Site Adi</Text>
+        <TextInput
+          style={styles.settingsInput}
+          placeholder="Site adinizi girin"
+          placeholderTextColor={Colors.textLight}
+          value={siteName}
+          onChangeText={setSiteName}
+          autoCapitalize="none"
+          testID="site-name-input"
+        />
+
+        <TouchableOpacity
+          style={[styles.saveBtn, { backgroundColor: "#22C55E" }, !siteName.trim() && { opacity: 0.5 }]}
+          onPress={handleSaveSiteName}
+          disabled={!siteName.trim()}
+          testID="save-site-name"
+        >
+          <Type size={18} color={Colors.white} />
+          <Text style={styles.saveBtnText}>Site Adini Kaydet</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={[styles.settingsCard, { marginTop: 16 }]}>
         <View style={styles.settingsHeader}>
           <Key size={20} color={Colors.primary} />
           <Text style={styles.settingsTitle}>AI Otomatik Yanit Ayarlari</Text>
