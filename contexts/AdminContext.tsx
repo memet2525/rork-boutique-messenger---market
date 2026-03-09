@@ -55,11 +55,22 @@ export interface CustomerMember {
   isStore: boolean;
 }
 
+export interface FooterContent {
+  userAgreement: string;
+  privacyPolicy: string;
+  kvkk: string;
+  cookiePolicy: string;
+  contactInfo: string;
+  faq: string;
+  copyright: string;
+}
+
 export interface AdminSettings {
   aiApiKey: string;
   aiProvider: string;
   sellerAgreement: string;
   userAgreement: string;
+  footerContent: FooterContent;
 }
 
 export const DEFAULT_USER_AGREEMENT = `KULLANICI SOZLESMESI
@@ -89,6 +100,132 @@ Platform, Kullanici'ya online alisveris yapma, magaza urunlerini inceleme ve sat
 Kullanici istediginde hesabini kapatabilir.
 
 Bu sozlesmeyi okuyup kabul ettiginizi onaylayin.`;
+
+export const DEFAULT_FOOTER_CONTENT: FooterContent = {
+  userAgreement: `KULLANICI SOZLESMESI
+
+Bu sozlesme, ButikBiz platformuna uye olan kullanicilar ile platform arasindaki iliskiyi duzenler.
+
+1. TARAFLAR
+Bu sozlesme, ButikBiz platformu ("Platform") ile platforma uye olan kullanici ("Kullanici") arasinda akdedilmistir.
+
+2. HIZMET KAPSAMI
+Platform, Kullanici'ya online alisveris yapma, magaza urunlerini inceleme ve satin alma imkani saglar.
+
+3. KULLANICI YUKUMLULUKLERI
+- Kullanici, kayit sirasinda dogru ve guncel bilgiler vermekle yukumludur.
+- Kullanici, hesap bilgilerini gizli tutmakla sorumludur.
+- Kullanici, platform kurallarini ihlal etmeyecegini kabul eder.
+
+4. GIZLILIK
+Platform, kullanici bilgilerini ucuncu taraflarla paylasmaz.
+
+5. FESIH
+Kullanici istediginde hesabini kapatabilir.`,
+  privacyPolicy: `GIZLILIK POLITIKASI
+
+ButikBiz olarak kullanicilarimizin gizliligine onem veriyoruz.
+
+1. TOPLANAN VERILER
+- Ad, soyad, e-posta adresi, telefon numarasi
+- Magaza bilgileri (saticilar icin)
+- Kullanim verileri ve cerez bilgileri
+
+2. VERILERIN KULLANIMI
+- Hizmetlerimizi sunmak ve iyilestirmek
+- Kullanici deneyimini kisisellestirmek
+- Guvenlik ve dolandiricilik onleme
+
+3. VERILERIN PAYLASILMASI
+Kisisel verileriniz ucuncu taraflarla paylasilmaz. Yasal zorunluluklar haric.
+
+4. VERI GUVENILIGI
+Verileriniz sifrelenmis ortamda guvenli sekilde saklanir.
+
+5. HAKLARINIZ
+Verilerinize erisim, duzeltme ve silme hakkiniz bulunmaktadir.`,
+  kvkk: `KISISEL VERILERIN KORUNMASI HAKKINDA AYDINLATMA METNI
+
+6698 sayili Kisisel Verilerin Korunmasi Kanunu ("KVKK") uyarinca, ButikBiz olarak kisisel verilerinizin korunmasina onem veriyoruz.
+
+1. VERI SORUMLUSU
+ButikBiz platformu veri sorumlusu sifatiyla hareket etmektedir.
+
+2. ISLENEN KISISEL VERILER
+- Kimlik bilgileri (ad, soyad)
+- Iletisim bilgileri (telefon, e-posta, adres)
+- Musteri islem bilgileri
+- Pazarlama bilgileri
+
+3. KISISEL VERILERIN ISLENME AMACI
+- Urun ve hizmetlerin sunulmasi
+- Sozlesme sureclerinin yurutulmesi
+- Musteri iliskilerinin yonetilmesi
+
+4. KISISEL VERILERIN AKTARILMASI
+Kisisel verileriniz yasal yuksumluluklerin yerine getirilmesi amaciyla yetkili kurumlara aktarilabilir.
+
+5. HAKLARINIZ
+KVKK'nin 11. maddesi kapsaminda;
+- Verilerinizin islenip islenmedigini ogrenme
+- Verilerinizin duzeltilmesini isteme
+- Verilerinizin silinmesini isteme
+- Verilerin aktarildigi ucuncu kisileri ogrenme
+haklarina sahipsiniz.`,
+  cookiePolicy: `CEREZ POLITIKASI
+
+ButikBiz platformu, kullanici deneyimini iyilestirmek icin cerezler kullanmaktadir.
+
+1. CEREZ NEDIR?
+Cerezler, web sitelerinin cihaziniza yerlestirdigi kucuk metin dosyalaridir.
+
+2. KULLANILAN CEREZ TURLERI
+- Zorunlu Cerezler: Platformun duzgun calismasi icin gereklidir.
+- Performans Cerezleri: Kullanim istatistiklerini toplar.
+- Islevsellik Cerezleri: Tercihlerinizi hatirlar.
+- Hedefleme Cerezleri: Size uygun icerik sunmak icin kullanilir.
+
+3. CEREZ YONETIMI
+Tarayici ayarlarinizdan cerezleri yonetebilir veya silebilirsiniz.
+
+4. UCUNCU TARAF CEREZLERI
+Analitik ve reklam amacli ucuncu taraf cerezleri kullanilabilir.`,
+  contactInfo: `ILETISIM BILGILERI
+
+ButikBiz Musteri Hizmetleri
+
+E-posta: destek@butikbiz.com
+Telefon: 0850 123 45 67
+Calisma Saatleri: Hafta ici 09:00 - 18:00
+
+Adres: Istanbul, Turkiye
+
+Sosyal Medya:
+- Instagram: @butikbiz
+- Twitter: @butikbiz
+
+Destek talepleriniz icin bize e-posta gonderebilir veya uygulama ici sohbet ozelligini kullanabilirsiniz.`,
+  faq: `SIKCA SORULAN SORULAR
+
+1. Nasil magaza acabilirim?
+Profil sayfasindan 'Magaza Ac' secenegine tiklayarak magaza acma formunu doldurabilirsiniz.
+
+2. Odeme nasil yapilir?
+Uygulama icinde dogrudan odeme sistemi bulunmamaktadir. Satici ile sohbet uzerinden anlasarak odeme detaylarini belirleyebilirsiniz.
+
+3. Siparis takibi nasil yapilir?
+Satici ile sohbet ekrani uzerinden siparis durumunuzu takip edebilirsiniz.
+
+4. Urun iade/degisim yapabilir miyim?
+Iade ve degisim kosullari saticiya gore degisir. Satin alma oncesinde satici ile iletisime gecerek iade kosullarini ogrenmenizi oneririz.
+
+5. Hesabimi nasil silebilirim?
+Profil > Gizlilik > Hesabi Sil seceneginden hesabinizi kalici olarak silebilirsiniz.
+
+6. Bildirimler gelmiyor, ne yapmaliyim?
+Profil > Bildirimler bolumunden bildirim ayarlarinizi kontrol edin.`,
+  copyright: `© 2024 ButikBiz. Tum haklari saklidir.`,
+};
 
 export const DEFAULT_SELLER_AGREEMENT = `SATICI SOZLESMESI
 
@@ -146,7 +283,7 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
   const queryClient = useQueryClient();
   const [stores, setStores] = useState<StoreMember[]>([]);
   const [customers, setCustomers] = useState<CustomerMember[]>([]);
-  const [settings, setSettings] = useState<AdminSettings>({ aiApiKey: "", aiProvider: "openai", sellerAgreement: DEFAULT_SELLER_AGREEMENT, userAgreement: DEFAULT_USER_AGREEMENT });
+  const [settings, setSettings] = useState<AdminSettings>({ aiApiKey: "", aiProvider: "openai", sellerAgreement: DEFAULT_SELLER_AGREEMENT, userAgreement: DEFAULT_USER_AGREEMENT, footerContent: DEFAULT_FOOTER_CONTENT });
 
   const realUsersQuery = useQuery({
     queryKey: ["adminAllUsers"],
@@ -202,9 +339,10 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
           aiProvider: data.aiProvider || "openai",
           sellerAgreement: data.sellerAgreement || DEFAULT_SELLER_AGREEMENT,
           userAgreement: data.userAgreement || DEFAULT_USER_AGREEMENT,
+          footerContent: data.footerContent ? { ...DEFAULT_FOOTER_CONTENT, ...data.footerContent } : DEFAULT_FOOTER_CONTENT,
         } as AdminSettings;
       }
-      return { aiApiKey: "", aiProvider: "openai", sellerAgreement: DEFAULT_SELLER_AGREEMENT, userAgreement: DEFAULT_USER_AGREEMENT } as AdminSettings;
+      return { aiApiKey: "", aiProvider: "openai", sellerAgreement: DEFAULT_SELLER_AGREEMENT, userAgreement: DEFAULT_USER_AGREEMENT, footerContent: DEFAULT_FOOTER_CONTENT } as AdminSettings;
     },
   });
 

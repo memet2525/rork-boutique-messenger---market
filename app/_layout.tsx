@@ -186,6 +186,7 @@ function RootLayoutNav() {
       <Stack.Screen name="admin" options={{ headerShown: true }} />
       <Stack.Screen name="boss" options={{ headerShown: true }} />
       <Stack.Screen name="system-messages" options={{ headerShown: true }} />
+      <Stack.Screen name="legal-page" options={{ headerShown: true }} />
       <Stack.Screen name="login" options={{ headerShown: true, presentation: "modal" }} />
     </Stack>
   );

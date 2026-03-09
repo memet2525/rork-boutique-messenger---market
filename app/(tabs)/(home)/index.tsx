@@ -13,8 +13,7 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { useRouter, RelativePathString } from "expo-router";
-import { Search, Star, MapPin, LogIn, X, Download, MessageCircle } from "lucide-react-native";
-import * as Haptics from "expo-haptics";
+import { Search, Star, MapPin, LogIn, X, Download } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -22,7 +21,8 @@ import Colors from "@/constants/colors";
 import { stores, Store, Product } from "@/mocks/stores";
 import { useUser } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
-import { getFirestoreStores, getChatId } from "@/services/firestore";
+import { getFirestoreStores } from "@/services/firestore";
+import Footer from "@/components/Footer";
 
 const CATEGORIES = ["Tümü", "Moda", "Teknoloji", "Gıda", "Dekorasyon", "Spor", "Butik", "Diğer"];
 
@@ -115,7 +115,7 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
 export default function MarketplaceScreen() {
   const router = useRouter();
   const { profile, isLoggedIn, uid } = useUser();
-  const { showAlert } = useAlert();
+  const _alert = useAlert();
   const [installPrompt, setInstallPrompt] = useState<any>(deferredPrompt);
   const [isStandalone, setIsStandalone] = useState<boolean>(false);
 
@@ -226,37 +226,6 @@ export default function MarketplaceScreen() {
     router.push(`/store/${storeId}` as any);
   }, [router]);
 
-  const handleMessagePress = useCallback((store: Store) => {
-    if (!isLoggedIn) {
-      showAlert(
-        "Üye Olun",
-        "Satıcıya mesaj yazabilmek için üye olmanız gerekmektedir.",
-        [
-          { text: "Vazgeç", style: "cancel" },
-          { text: "Giriş Yap / Üye Ol", onPress: () => router.push("/login" as any) },
-        ]
-      );
-      return;
-    }
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    const storeOwnerId = store.ownerId || store.id;
-    const chatId = getChatId(uid ?? "anon", storeOwnerId);
-    console.log("Starting chat from home - storeOwnerId:", storeOwnerId, "storeId:", store.id, "chatId:", chatId);
-    router.push({
-      pathname: "/chat/[id]" as RelativePathString,
-      params: {
-        id: chatId,
-        storeId: store.id,
-        storeName: store.name,
-        storeAvatar: store.avatar,
-        storeOwnerId: storeOwnerId,
-        isOnline: store.isOnline ? "true" : "false",
-      },
-    });
-  }, [isLoggedIn, uid, router, showAlert]);
-
   const handleProductPress = useCallback((productId: string, storeId: string, resolvedOwnerId: string) => {
     router.push({
       pathname: "/product/[id]" as RelativePathString,
@@ -270,7 +239,7 @@ export default function MarketplaceScreen() {
       onPress={() => handleStorePress(item.id)}
       onProductPress={(productId) => handleProductPress(productId, item.id, item.ownerId || item.id)}
     />
-  ), [handleStorePress, handleMessagePress, handleProductPress]);
+  ), [handleStorePress, handleProductPress]);
 
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -392,6 +361,7 @@ export default function MarketplaceScreen() {
             <Text style={styles.emptySubtext}>Farklı bir arama deneyin</Text>
           </View>
         }
+        ListFooterComponent={<Footer />}
       />
     </View>
   );
