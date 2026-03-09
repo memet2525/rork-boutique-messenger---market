@@ -466,6 +466,9 @@ export interface FirestoreMessage {
   timestamp: string;
   createdAt: any;
   isRead: boolean;
+  productImage?: string;
+  productName?: string;
+  productPrice?: string;
 }
 
 export interface FirestoreChat {
@@ -679,6 +682,9 @@ export async function sendChatNotification(
 export async function sendChatMessage(chatId: string, message: {
   text: string;
   senderId: string;
+  productImage?: string;
+  productName?: string;
+  productPrice?: string;
 }): Promise<FirestoreMessage> {
   try {
     const msgId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -691,6 +697,9 @@ export async function sendChatMessage(chatId: string, message: {
       timestamp: timeStr,
       createdAt: now.toISOString(),
       isRead: false,
+      ...(message.productImage ? { productImage: message.productImage } : {}),
+      ...(message.productName ? { productName: message.productName } : {}),
+      ...(message.productPrice ? { productPrice: message.productPrice } : {}),
     };
     const msgRef = doc(db, "chats", chatId, "messages", msgId);
     await setDoc(msgRef, msgData);

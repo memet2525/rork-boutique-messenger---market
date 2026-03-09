@@ -45,13 +45,11 @@ interface DisplayMessage {
   isRead: boolean;
   isProductCard?: boolean;
   isOptimistic?: boolean;
+  productImage?: string;
+  productName?: string;
+  productPrice?: string;
 }
 
-interface ProductCard {
-  image: string;
-  name: string;
-  price: string;
-}
 
 function MessageBubble({ message }: { message: DisplayMessage }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -101,7 +99,7 @@ function MessageBubble({ message }: { message: DisplayMessage }) {
   );
 }
 
-function ProductMessageBubble({ product, timestamp }: { product: ProductCard; timestamp: string }) {
+function ProductMessageBubble({ message }: { message: DisplayMessage }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -112,21 +110,43 @@ function ProductMessageBubble({ product, timestamp }: { product: ProductCard; ti
     }).start();
   }, [fadeAnim]);
 
+  const isSent = message.isSent;
+
   return (
-    <Animated.View style={[styles.bubbleContainer, styles.sentContainer, { opacity: fadeAnim }]}>
-      <View style={[styles.bubble, styles.sentBubble, { padding: 0, overflow: "hidden" as const }]}>
-        <Image source={{ uri: product.image }} style={styles.productCardImage} contentFit="cover" />
-        <View style={styles.productCardInfo}>
-          <Text style={[styles.messageText, styles.sentText, { fontWeight: "700" as const, fontSize: 14 }]}>{product.name}</Text>
-          <Text style={[styles.productCardPrice]}>{product.price}</Text>
-          <Text style={[styles.messageText, styles.sentText, { fontSize: 13, marginTop: 4 }]}>Bu ürün hakkında bilgi almak istiyorum.</Text>
+    <Animated.View
+      style={[
+        styles.bubbleRow,
+        isSent ? styles.sentRow : styles.receivedRow,
+        { opacity: fadeAnim },
+      ]}
+    >
+      <View style={[styles.bubbleContainer, isSent ? styles.sentContainer : styles.receivedContainer]}>
+        <View style={[styles.bubble, isSent ? styles.sentBubble : styles.receivedBubble, { padding: 0, overflow: "hidden" as const }]}>
+          {message.productImage ? (
+            <Image source={{ uri: message.productImage }} style={styles.productCardImage} contentFit="cover" />
+          ) : null}
+          <View style={styles.productCardInfo}>
+            {message.productName ? (
+              <Text style={[styles.messageText, isSent ? styles.sentText : styles.receivedText, { fontWeight: "700" as const, fontSize: 14 }]}>{message.productName}</Text>
+            ) : null}
+            {message.productPrice ? (
+              <Text style={styles.productCardPrice}>{message.productPrice}</Text>
+            ) : null}
+            <Text style={[styles.messageText, isSent ? styles.sentText : styles.receivedText, { fontSize: 13, marginTop: 4 }]}>Bu ürün hakkında bilgi almak istiyorum.</Text>
+          </View>
+          <View style={[styles.messageFooter, { paddingHorizontal: 12, paddingBottom: 6 }]}>
+            <Text style={[styles.timestamp, isSent ? styles.sentTimestamp : {}]}>{message.timestamp}</Text>
+            {isSent && (
+              message.isRead ? (
+                <CheckCheck size={14} color="#34B7F1" />
+              ) : (
+                <CheckCheck size={14} color="#92A4A3" />
+              )
+            )}
+          </View>
         </View>
-        <View style={[styles.messageFooter, { paddingHorizontal: 12, paddingBottom: 6 }]}>
-          <Text style={[styles.timestamp, styles.sentTimestamp]}>{timestamp}</Text>
-          <CheckCheck size={14} color="#92A4A3" />
-        </View>
+        <View style={isSent ? styles.sentTail : styles.receivedTail} />
       </View>
-      <View style={styles.sentTail} />
     </Animated.View>
   );
 }
@@ -165,7 +185,7 @@ export default function ChatDetailScreen() {
   const [messageText, setMessageText] = useState<string>("");
   const [firestoreMessages, setFirestoreMessages] = useState<FirestoreMessage[]>([]);
   const [optimisticMessages, setOptimisticMessages] = useState<DisplayMessage[]>([]);
-  const [productCard, setProductCard] = useState<ProductCard | null>(null);
+
   const [isLoadingMessages, setIsLoadingMessages] = useState<boolean>(true);
   const [menuVisible, setMenuVisible] = useState<boolean>(false);
   const [isOtherTyping, setIsOtherTyping] = useState<boolean>(false);
@@ -203,7 +223,10 @@ export default function ChatDetailScreen() {
       timestamp: msg.timestamp,
       isSent: msg.senderId === uid,
       isRead: msg.isRead,
-      isProductCard: msg.text.includes("Bu ürün hakkında bilgi almak istiyorum") && msg.senderId === uid,
+      isProductCard: !!(msg.productImage || msg.productName),
+      productImage: msg.productImage,
+      productName: msg.productName,
+      productPrice: msg.productPrice,
     }));
 
     const firestoreTexts = new Set(firestoreMessages.map((m) => `${m.text}::${m.senderId}`));
@@ -421,7 +444,6 @@ export default function ChatDetailScreen() {
     onSuccess: () => {
       setFirestoreMessages([]);
       setOptimisticMessages([]);
-      setProductCard(null);
       prevMessageCountRef.current = 0;
       void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
       setMenuVisible(false);
@@ -454,9 +476,9 @@ export default function ChatDetailScreen() {
   }, [clearChat]);
 
   const { mutate: sendMessageMutate } = useMutation({
-    mutationFn: async (text: string) => {
+    mutationFn: async (params: { text: string; productImage?: string; productName?: string; productPrice?: string }) => {
       if (!id || !uid) throw new Error("Missing chat or user id");
-      return sendChatMessage(id, { text, senderId: uid });
+      return sendChatMessage(id, { text: params.text, senderId: uid, productImage: params.productImage, productName: params.productName, productPrice: params.productPrice });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
@@ -472,12 +494,13 @@ export default function ChatDetailScreen() {
         if (chatInitDone.current || !storeId) {
           hasInjectedProduct.current = true;
 
-          if (productImage && productName && productPrice) {
-            setProductCard({ image: productImage, name: productName, price: productPrice });
-          }
-
-          console.log("Sending product message:", id);
-          sendMessageMutate(productMessage);
+          console.log("Sending product message with image:", id, productImage);
+          sendMessageMutate({
+            text: productMessage,
+            productImage: productImage || undefined,
+            productName: productName || undefined,
+            productPrice: productPrice || undefined,
+          });
 
           setTimeout(() => {
             flatListRef.current?.scrollToEnd({ animated: true });
@@ -523,7 +546,7 @@ export default function ChatDetailScreen() {
     setOptimisticMessages((prev) => [...prev, optimisticMsg]);
     setMessageText("");
 
-    sendMessageMutate(text);
+    sendMessageMutate({ text });
 
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
@@ -574,8 +597,8 @@ export default function ChatDetailScreen() {
   );
 
   const renderMessage = ({ item }: { item: DisplayMessage }) => {
-    if (item.isProductCard && productCard) {
-      return <ProductMessageBubble product={productCard} timestamp={item.timestamp} />;
+    if (item.isProductCard) {
+      return <ProductMessageBubble message={item} />;
     }
     return <MessageBubble message={item} />;
   };
