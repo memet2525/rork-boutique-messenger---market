@@ -13,7 +13,6 @@ import {
   ChevronDown,
   Mail,
   Phone,
-  MessageCircle,
   ExternalLink,
 } from "lucide-react-native";
 
@@ -131,16 +130,7 @@ export default function HelpScreen() {
             </View>
             <ExternalLink size={16} color={Colors.textLight} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.contactRow}>
-            <View style={[styles.contactIcon, { backgroundColor: "#8B5CF615" }]}>
-              <MessageCircle size={20} color="#8B5CF6" />
-            </View>
-            <View style={styles.contactText}>
-              <Text style={styles.contactLabel}>Canlı Destek</Text>
-              <Text style={styles.contactValue}>Hafta içi 09:00 - 18:00</Text>
-            </View>
-            <ExternalLink size={16} color={Colors.textLight} />
-          </TouchableOpacity>
+
         </View>
 
         <Text style={styles.footerNote}>
