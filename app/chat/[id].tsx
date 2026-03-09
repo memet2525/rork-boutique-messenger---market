@@ -143,6 +143,8 @@ export default function ChatDetailScreen() {
     productImage,
     productName,
     productPrice,
+    customerName: customerNameParam,
+    customerAvatar: customerAvatarParam,
   } = useLocalSearchParams<{
     id: string;
     storeId?: string;
@@ -154,6 +156,8 @@ export default function ChatDetailScreen() {
     productImage?: string;
     productName?: string;
     productPrice?: string;
+    customerName?: string;
+    customerAvatar?: string;
   }>();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -178,9 +182,14 @@ export default function ChatDetailScreen() {
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isAdminChat = storeId === BUTIKBIZ_ADMIN_ID || id?.startsWith("admin_");
+  const initialIsOwner = !!(uid && storeOwnerIdParam && uid === storeOwnerIdParam);
 
-  const [liveStoreName, setLiveStoreName] = useState<string>(storeName ?? "Mağaza");
-  const [liveStoreAvatar, setLiveStoreAvatar] = useState<string>(storeAvatar ?? "");
+  const [liveStoreName, setLiveStoreName] = useState<string>(
+    initialIsOwner && customerNameParam ? customerNameParam : (storeName ?? "Mağaza")
+  );
+  const [liveStoreAvatar, setLiveStoreAvatar] = useState<string>(
+    initialIsOwner && customerAvatarParam ? customerAvatarParam : (storeAvatar ?? "")
+  );
 
   const resolvedStoreName = isAdminChat ? BUTIKBIZ_NAME : liveStoreName;
   const resolvedStoreAvatar = isAdminChat ? BUTIKBIZ_AVATAR : liveStoreAvatar;
@@ -373,8 +382,8 @@ export default function ChatDetailScreen() {
           storeName: storeName || "Mağaza",
           storeAvatar: storeAvatar ?? storeData?.avatar ?? "",
           storeOwnerId: resolvedOwnerId,
-          customerName: profile.name || profile.firstName || "Müşteri",
-          customerAvatar: profile.avatar || "",
+          customerName: initialIsOwner ? (customerNameParam || "Müşteri") : (profile.name || profile.firstName || "Müşteri"),
+          customerAvatar: initialIsOwner ? (customerAvatarParam || "") : (profile.avatar || ""),
         }).then((chatData) => {
           console.log("Chat created/initialized:", id);
           chatInitDone.current = true;
@@ -395,7 +404,7 @@ export default function ChatDetailScreen() {
         chatInitDone.current = true;
       }
     }
-  }, [id, uid, storeId, storeName, storeAvatar, storeOwnerIdParam, profile, queryClient]);
+  }, [id, uid, storeId, storeName, storeAvatar, storeOwnerIdParam, profile, queryClient, initialIsOwner, customerNameParam, customerAvatarParam]);
 
   const clearChatMutation = useMutation({
     mutationFn: async () => {

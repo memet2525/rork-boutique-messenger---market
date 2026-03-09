@@ -304,19 +304,20 @@ export default function ChatsScreen() {
       );
       return;
     }
-    const isOwner = uid === chat.storeOwnerId;
     router.push({
       pathname: "/chat/[id]" as RelativePathString,
       params: {
         id: chat.id,
         storeId: chat.storeId,
-        storeName: isOwner ? chat.customerName : chat.storeName,
-        storeAvatar: isOwner ? chat.customerAvatar : chat.storeAvatar,
+        storeName: chat.storeName,
+        storeAvatar: chat.storeAvatar,
         storeOwnerId: chat.storeOwnerId ?? "",
+        customerName: chat.customerName,
+        customerAvatar: chat.customerAvatar,
         isOnline: chat.isOnline ? "true" : "false",
       },
     });
-  }, [router, isLoggedIn, showAlert, uid]);
+  }, [router, isLoggedIn, showAlert]);
 
   const handleToggleAI = useCallback(() => {
     if (!isPro) {
