@@ -326,25 +326,50 @@ function AdminLoginForm({ onLogin }: { onLogin: () => void }) {
     setLoading(true);
     try {
       console.log("Admin: Starting Firebase Auth sign-in...");
+      let signedIn = false;
       try {
         await signInWithEmailAndPassword(auth, email.trim(), password);
+        signedIn = true;
       } catch (signInErr: any) {
         console.log("Admin sign-in failed, code:", signInErr?.code);
-        if (signInErr?.code === "auth/user-not-found" || signInErr?.code === "auth/invalid-credential") {
+        if (signInErr?.code === "auth/user-not-found") {
           console.log("Admin: User not found, creating account...");
           await createUserWithEmailAndPassword(auth, email.trim(), password);
-          console.log("Admin: Account created, signing in...");
-          await signInWithEmailAndPassword(auth, email.trim(), password);
+          signedIn = true;
+        } else if (signInErr?.code === "auth/invalid-credential" || signInErr?.code === "auth/wrong-password") {
+          console.log("Admin: Invalid credential, trying to delete and recreate...");
+          try {
+            await createUserWithEmailAndPassword(auth, email.trim(), password);
+            signedIn = true;
+          } catch (createErr: any) {
+            console.log("Admin: Create failed, code:", createErr?.code);
+            if (createErr?.code === "auth/email-already-in-use") {
+              console.log("Admin: Account exists with different password, sending reset email...");
+              try {
+                await sendPasswordResetEmail(auth, email.trim());
+                setError("Sifre uyusmuyor. Sifre sifirlama e-postasi gonderildi. E-postanizi kontrol edip sifrenizi '" + ADMIN_PASSWORD + "' olarak degistirin, sonra tekrar deneyin.");
+              } catch (resetErr: any) {
+                console.log("Admin: Reset email failed:", resetErr?.code);
+                setError("Sifre uyusmuyor ve sifirlama e-postasi gonderilemedi. Firebase konsolundan sifreyi manuel olarak degistirin.");
+              }
+              triggerShake();
+              setLoading(false);
+              return;
+            }
+            throw createErr;
+          }
         } else {
           throw signInErr;
         }
       }
-      console.log("Admin: Firebase Auth sign-in successful, uid:", auth.currentUser?.uid);
-      if (Platform.OS !== "web") {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (signedIn) {
+        console.log("Admin: Firebase Auth sign-in successful, uid:", auth.currentUser?.uid);
+        if (Platform.OS !== "web") {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+        setError("");
+        onLogin();
       }
-      setError("");
-      onLogin();
     } catch (err: any) {
       console.log("Admin login error:", err?.code, err?.message);
       if (Platform.OS !== "web") {
@@ -354,6 +379,8 @@ function AdminLoginForm({ onLogin }: { onLogin: () => void }) {
         setError("Ag hatasi. Internet baglantinizi kontrol edin.");
       } else if (err?.code === "auth/email-already-in-use") {
         setError("Bu e-posta zaten kayitli ancak sifre uyusmuyor. Firebase konsolundan sifreyi sifirlayin.");
+      } else if (err?.code === "auth/too-many-requests") {
+        setError("Cok fazla basarisiz deneme. Lutfen biraz bekleyip tekrar deneyin.");
       } else {
         setError(err?.message || "Giris sirasinda bir hata olustu.");
       }
