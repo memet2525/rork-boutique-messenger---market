@@ -541,6 +541,7 @@ export async function getOrCreateChat(params: {
         }
         if (params.storeName && params.storeName !== existingData.storeName) {
           updates.storeName = params.storeName;
+          console.log("getOrCreateChat: fixing storeName from", existingData.storeName, "to", params.storeName);
         }
       }
       if (Object.keys(updates).length > 0) {

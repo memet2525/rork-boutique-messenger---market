@@ -375,12 +375,19 @@ export default function ChatDetailScreen() {
         const resolvedOwnerId = storeOwnerIdParam || storeId || "unknown";
         console.log("Chat init with storeOwnerId:", resolvedOwnerId, "storeId:", storeId, "uid:", uid, "chatId:", id);
 
+        const correctStoreName = initialIsOwner
+          ? (profile.storeName || storeName || "Mağaza")
+          : (storeName || "Mağaza");
+        const correctStoreAvatar = initialIsOwner
+          ? (profile.avatar || storeAvatar || "")
+          : (storeAvatar ?? storeData?.avatar ?? "");
+
         getOrCreateChat({
           chatId: id,
           userId: uid,
           storeId: storeId,
-          storeName: storeName || "Mağaza",
-          storeAvatar: storeAvatar ?? storeData?.avatar ?? "",
+          storeName: correctStoreName,
+          storeAvatar: correctStoreAvatar,
           storeOwnerId: resolvedOwnerId,
           customerName: initialIsOwner ? (customerNameParam || "Müşteri") : (profile.name || profile.firstName || "Müşteri"),
           customerAvatar: initialIsOwner ? (customerAvatarParam || "") : (profile.avatar || ""),
