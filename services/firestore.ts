@@ -528,6 +528,24 @@ export async function getOrCreateChat(params: {
       const existingData = chatSnap.data() as FirestoreChat;
       const updates: Record<string, any> = {};
       const isCustomer = params.userId === existingData.customerId || params.userId !== existingData.storeOwnerId;
+
+      let freshStoreName = params.storeName;
+      let freshStoreAvatar = params.storeAvatar;
+      try {
+        const realStoreOwnerId = existingData.storeOwnerId || params.storeOwnerId;
+        if (realStoreOwnerId && realStoreOwnerId !== BUTIKBIZ_ADMIN_ID) {
+          const storeDoc = await getDoc(doc(db, "stores", realStoreOwnerId));
+          if (storeDoc.exists()) {
+            const storeData = storeDoc.data();
+            if (storeData.name) freshStoreName = storeData.name as string;
+            if (storeData.avatar) freshStoreAvatar = storeData.avatar as string;
+            console.log("getOrCreateChat: fetched fresh store name:", freshStoreName);
+          }
+        }
+      } catch (storeErr) {
+        console.log("getOrCreateChat: could not fetch fresh store data (non-critical):", storeErr);
+      }
+
       if (isCustomer) {
         if (params.customerAvatar && params.customerAvatar !== existingData.customerAvatar) {
           updates.customerAvatar = params.customerAvatar;
@@ -536,13 +554,16 @@ export async function getOrCreateChat(params: {
           updates.customerName = params.customerName;
         }
       } else {
-        if (params.storeAvatar && params.storeAvatar !== existingData.storeAvatar) {
-          updates.storeAvatar = params.storeAvatar;
+        if (freshStoreAvatar && freshStoreAvatar !== existingData.storeAvatar) {
+          updates.storeAvatar = freshStoreAvatar;
         }
-        if (params.storeName && params.storeName !== existingData.storeName) {
-          updates.storeName = params.storeName;
-          console.log("getOrCreateChat: fixing storeName from", existingData.storeName, "to", params.storeName);
-        }
+      }
+      if (freshStoreName && freshStoreName !== existingData.storeName) {
+        updates.storeName = freshStoreName;
+        console.log("getOrCreateChat: fixing storeName from", existingData.storeName, "to", freshStoreName);
+      }
+      if (freshStoreAvatar && freshStoreAvatar !== existingData.storeAvatar) {
+        updates.storeAvatar = freshStoreAvatar;
       }
       if (Object.keys(updates).length > 0) {
         console.log("Updating chat avatar/name fields:", params.chatId, updates);
@@ -578,11 +599,27 @@ export async function getOrCreateChat(params: {
 
     const uniqueParticipants = [params.userId, params.storeOwnerId];
 
+    let resolvedStoreName = params.storeName || "Mağaza";
+    let resolvedStoreAvatar = params.storeAvatar || "";
+    try {
+      if (params.storeOwnerId && params.storeOwnerId !== BUTIKBIZ_ADMIN_ID) {
+        const storeDoc = await getDoc(doc(db, "stores", params.storeOwnerId));
+        if (storeDoc.exists()) {
+          const storeData = storeDoc.data();
+          if (storeData.name) resolvedStoreName = storeData.name as string;
+          if (storeData.avatar) resolvedStoreAvatar = storeData.avatar as string;
+          console.log("getOrCreateChat: using fresh store name for new chat:", resolvedStoreName);
+        }
+      }
+    } catch (storeErr) {
+      console.log("getOrCreateChat: could not fetch store for new chat (non-critical):", storeErr);
+    }
+
     const newChat: Omit<FirestoreChat, "id"> = {
       participants: uniqueParticipants,
       storeId: params.storeId,
-      storeName: params.storeName || "Mağaza",
-      storeAvatar: params.storeAvatar || "",
+      storeName: resolvedStoreName,
+      storeAvatar: resolvedStoreAvatar,
       storeOwnerId: params.storeOwnerId,
       customerId: params.userId,
       customerName: params.customerName || "Müşteri",
