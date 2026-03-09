@@ -24,7 +24,6 @@ import {
   Mail,
   Crown,
   Clock,
-  MailOpen,
 } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
@@ -50,7 +49,6 @@ export default function ProfileScreen() {
   const chatCount = chats.length;
   const favoriteCount = profile.favorites.length;
   const trialDays = getTrialDaysLeft();
-  const unreadMsgCount = profile.systemNotifications?.filter((n) => !n.read).length ?? 0;
 
   const handleAvatarPress = useCallback(async () => {
     try {
@@ -213,22 +211,6 @@ export default function ProfileScreen() {
             </View>
           )}
         </View>
-
-        <TouchableOpacity
-          style={styles.messagesButton}
-          onPress={() => router.push("/system-messages" as never)}
-          activeOpacity={0.7}
-          testID="system-messages-btn"
-        >
-          <MailOpen size={18} color={Colors.primary} />
-          <Text style={styles.messagesButtonText}>Mesajlarim</Text>
-          {unreadMsgCount > 0 && (
-            <View style={styles.msgBadge}>
-              <Text style={styles.msgBadgeText}>{unreadMsgCount}</Text>
-            </View>
-          )}
-          <ChevronRight size={16} color={Colors.textLight} />
-        </TouchableOpacity>
 
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
@@ -456,39 +438,7 @@ const styles = StyleSheet.create({
     fontWeight: "600" as const,
     color: Colors.danger,
   },
-  messagesButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginHorizontal: 20,
-    marginTop: 16,
-    backgroundColor: "#F0FDF4",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#BBF7D0",
-  },
-  messagesButtonText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "600" as const,
-    color: Colors.primary,
-  },
-  msgBadge: {
-    backgroundColor: Colors.danger,
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 6,
-  },
-  msgBadgeText: {
-    fontSize: 11,
-    fontWeight: "700" as const,
-    color: "#FFFFFF",
-  },
+
   versionText: {
     textAlign: "center",
     fontSize: 12,
