@@ -38,6 +38,9 @@ import {
   Globe,
   ChevronDown,
   ChevronUp,
+  AlertTriangle,
+  CheckCircle,
+  MapPin,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 
@@ -56,10 +59,12 @@ function StoreCard({
   store,
   onToggleStatus,
   onUpdatePlan,
+  onVerifyPayment,
 }: {
   store: StoreMember;
   onToggleStatus: () => void;
   onUpdatePlan: (plan: PlanType) => void;
+  onVerifyPayment: () => void;
 }) {
   const isActive = store.status === "active";
   const isMonthly = store.planType === "monthly";
@@ -124,11 +129,42 @@ function StoreCard({
           <Phone size={14} color={Colors.textSecondary} />
           <Text style={styles.detailText}>{store.phone}</Text>
         </View>
+        {store.email ? (
+          <View style={styles.detailRow}>
+            <Mail size={14} color={Colors.textSecondary} />
+            <Text style={styles.detailText}>{store.email}</Text>
+          </View>
+        ) : null}
+        {store.city && store.city !== "-" ? (
+          <View style={styles.detailRow}>
+            <MapPin size={14} color={Colors.textSecondary} />
+            <Text style={styles.detailText}>{store.city}</Text>
+          </View>
+        ) : null}
         <View style={styles.detailRow}>
           <Clock size={14} color={Colors.textSecondary} />
           <Text style={styles.detailText}>Kayıt: {store.createdAt}</Text>
         </View>
       </View>
+
+      {!store.paymentVerified && isActive && (
+        <View style={styles.paymentWarning}>
+          <AlertTriangle size={16} color="#DC2626" />
+          <Text style={styles.paymentWarningText}>Odeme dogrulanmadi!</Text>
+          <TouchableOpacity
+            style={styles.verifyBtn}
+            onPress={() => {
+              showAlert("Odeme Dogrula", `${store.name} icin odeme dogrulansin mi?`, [
+                { text: "Iptal", style: "cancel" },
+                { text: "Dogrula", onPress: onVerifyPayment },
+              ]);
+            }}
+          >
+            <CheckCircle size={14} color="#FFFFFF" />
+            <Text style={styles.verifyBtnText}>Dogrula</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={styles.planSection}>
         <Text style={styles.planTitle}>Üyelik Planı</Text>
@@ -221,6 +257,12 @@ function CustomerCard({
           <Phone size={14} color={Colors.textSecondary} />
           <Text style={styles.detailText}>{customer.phone}</Text>
         </View>
+        {customer.email ? (
+          <View style={styles.detailRow}>
+            <Mail size={14} color={Colors.textSecondary} />
+            <Text style={styles.detailText}>{customer.email}</Text>
+          </View>
+        ) : null}
         <View style={styles.detailRow}>
           <ShoppingBag size={14} color={Colors.textSecondary} />
           <Text style={styles.detailText}>{customer.orderCount} sipariş</Text>
@@ -283,20 +325,26 @@ function AdminLoginForm({ onLogin }: { onLogin: () => void }) {
     }
     setLoading(true);
     try {
-      signInWithEmailAndPassword(auth, email.trim(), password)
-        .then(() => console.log("Admin Firebase Auth sign-in successful"))
-        .catch((firebaseErr: any) => console.log("Admin Firebase Auth sign-in skipped:", firebaseErr?.code));
+      console.log("Admin: Starting Firebase Auth sign-in...");
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      console.log("Admin: Firebase Auth sign-in successful, uid:", auth.currentUser?.uid);
       if (Platform.OS !== "web") {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
       setError("");
       onLogin();
     } catch (err: any) {
-      console.log("Admin login error:", err);
+      console.log("Admin login error:", err?.code, err?.message);
       if (Platform.OS !== "web") {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
-      setError("Giris sirasinda bir hata olustu.");
+      if (err?.code === "auth/invalid-credential" || err?.code === "auth/wrong-password" || err?.code === "auth/user-not-found") {
+        setError("Firebase kimlik dogrulama hatasi. Lutfen Firebase konsolunda bu e-posta ile kullanici olusturun.");
+      } else if (err?.code === "auth/network-request-failed") {
+        setError("Ag hatasi. Internet baglantinizi kontrol edin.");
+      } else {
+        setError(err?.message || "Giris sirasinda bir hata olustu.");
+      }
       triggerShake();
     } finally {
       setLoading(false);
@@ -874,8 +922,10 @@ function MessagesTab() {
       showAlert("Basarili", `Mesaj ${targetLabel} gonderildi.`);
       setTitle("");
       setMessage("");
-    } catch {
-      showAlert("Hata", "Mesaj gonderilirken bir hata olustu.");
+    } catch (err: any) {
+      const errMsg = err?.message || "Mesaj gonderilirken bir hata olustu.";
+      console.log("Boss message send error:", err);
+      showAlert("Hata", errMsg);
     } finally {
       setSending(false);
     }
@@ -961,6 +1011,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
     customers,
     toggleStoreStatus,
     updateStorePlan,
+    verifyPayment,
     toggleCustomerStatus,
     activeStoreCount,
     activeCustomerCount,
@@ -1068,6 +1119,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                 store={store}
                 onToggleStatus={() => toggleStoreStatus(store.id)}
                 onUpdatePlan={(plan) => updateStorePlan(store.id, plan)}
+                onVerifyPayment={() => verifyPayment(store.id)}
               />
             ))}
           {activeTab === "customers" &&
@@ -1686,5 +1738,36 @@ const styles = StyleSheet.create({
     textAlign: "center" as const,
     marginBottom: 24,
     lineHeight: 22,
+  },
+  paymentWarning: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  paymentWarningText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600" as const,
+    color: "#DC2626",
+  },
+  verifyBtn: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 4,
+    backgroundColor: "#22C55E",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  verifyBtnText: {
+    fontSize: 12,
+    fontWeight: "700" as const,
+    color: "#FFFFFF",
   },
 });
