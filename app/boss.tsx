@@ -67,7 +67,7 @@ function StoreCard({
 
   const handleToggle = useCallback(() => {
     if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     showAlert(
       isActive ? "Mağazayı Pasif Yap" : "Mağazayı Aktif Yap",
@@ -82,7 +82,7 @@ function StoreCard({
   const handlePlanChange = useCallback(
     (plan: PlanType) => {
       if (Platform.OS !== "web") {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
       const planLabel = plan === "monthly" ? "Aylık" : "Yıllık";
       showAlert(
@@ -186,7 +186,7 @@ function CustomerCard({
 
   const handleToggle = useCallback(() => {
     if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     showAlert(
       isActive ? "Müşteriyi Pasif Yap" : "Müşteriyi Aktif Yap",
@@ -275,7 +275,7 @@ function AdminLoginForm({ onLogin }: { onLogin: () => void }) {
   const handleSubmit = useCallback(async () => {
     if (email.trim().toLowerCase() !== ADMIN_EMAIL.toLowerCase() || password !== ADMIN_PASSWORD) {
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
       setError("E-posta veya sifre hatali!");
       triggerShake();
@@ -283,21 +283,18 @@ function AdminLoginForm({ onLogin }: { onLogin: () => void }) {
     }
     setLoading(true);
     try {
-      try {
-        await signInWithEmailAndPassword(auth, email.trim(), password);
-        console.log("Admin Firebase Auth sign-in successful");
-      } catch (firebaseErr: any) {
-        console.log("Admin Firebase Auth sign-in skipped:", firebaseErr?.code);
-      }
+      signInWithEmailAndPassword(auth, email.trim(), password)
+        .then(() => console.log("Admin Firebase Auth sign-in successful"))
+        .catch((firebaseErr: any) => console.log("Admin Firebase Auth sign-in skipped:", firebaseErr?.code));
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
       setError("");
       onLogin();
     } catch (err: any) {
       console.log("Admin login error:", err);
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
       setError("Giris sirasinda bir hata olustu.");
       triggerShake();
@@ -476,7 +473,7 @@ function SettingsTab() {
     }
     updateSettings({ sellerAgreement: agreementText.trim() });
     if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     showAlert("Kaydedildi", "Satici sozlesmesi basariyla guncellendi.");
     setShowAgreementEditor(false);
@@ -504,7 +501,7 @@ function SettingsTab() {
     }
     updateSettings({ userAgreement: userAgreementText.trim() });
     if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
     showAlert("Kaydedildi", "Uye sozlesmesi basariyla guncellendi.");
     setShowUserAgreementEditor(false);
@@ -809,7 +806,7 @@ function SettingsTab() {
                     const updated = { ...footerContent, [field]: footerEditText.trim() };
                     updateSettings({ footerContent: updated });
                     if (Platform.OS !== "web") {
-                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     }
                     showAlert("Kaydedildi", `${BOSS_FOOTER_FIELD_LABELS[field]} basariyla guncellendi.`);
                     setExpandedFooterField(null);
@@ -877,7 +874,7 @@ function MessagesTab() {
       showAlert("Basarili", `Mesaj ${targetLabel} gonderildi.`);
       setTitle("");
       setMessage("");
-    } catch (_err) {
+    } catch {
       showAlert("Hata", "Mesaj gonderilirken bir hata olustu.");
     } finally {
       setSending(false);
@@ -972,7 +969,7 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const switchTab = useCallback((tab: TabType) => {
     setActiveTab(tab);
     if (Platform.OS !== "web") {
-      Haptics.selectionAsync();
+      void Haptics.selectionAsync();
     }
   }, []);
 
