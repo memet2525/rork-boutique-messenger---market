@@ -1,0 +1,221 @@
+const functions = require("firebase-functions");
+const admin = require("firebase-admin");
+
+admin.initializeApp();
+const db = admin.firestore();
+
+const DOMAIN = "butikbiz.com";
+const SITE_NAME = "ButikBiz";
+const DEFAULT_IMAGE = `https://${DOMAIN}/icon-512.png`;
+const DEFAULT_DESCRIPTION = "ButikBiz - Online mağazalar ve ürünler. Butik alışverişin yeni adresi.";
+
+function slugify(text) {
+  return text
+    .toLowerCase()
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ş/g, "s")
+    .replace(/ı/g, "i")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function escapeHtml(text) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function buildOgHtml(params) {
+  const { title, description, image, url, type = "website" } = params;
+  const safeTitle = escapeHtml(title);
+  const safeDesc = escapeHtml(description);
+  const safeImage = escapeHtml(image);
+  const safeUrl = escapeHtml(url);
+
+  return `<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${safeTitle}</title>
+  <meta name="description" content="${safeDesc}" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="${safeTitle}" />
+  <meta property="og:description" content="${safeDesc}" />
+  <meta property="og:image" content="${safeImage}" />
+  <meta property="og:url" content="${safeUrl}" />
+  <meta property="og:type" content="${type}" />
+  <meta property="og:site_name" content="${SITE_NAME}" />
+  <meta property="og:locale" content="tr_TR" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${safeTitle}" />
+  <meta name="twitter:description" content="${safeDesc}" />
+  <meta name="twitter:image" content="${safeImage}" />
+
+  <meta name="theme-color" content="#1a6b3c" />
+  <link rel="icon" type="image/png" href="/icon-512.png" />
+
+  <script>
+    var ua = navigator.userAgent || '';
+    var isBot = /facebookexternalhit|Twitterbot|WhatsApp|LinkedInBot|Slackbot|TelegramBot|Googlebot|bingbot|Discordbot/i.test(ua);
+    if (!isBot) {
+      window.location.replace("${safeUrl}");
+    }
+  </script>
+  <noscript>
+    <meta http-equiv="refresh" content="0;url=${safeUrl}" />
+  </noscript>
+</head>
+<body>
+  <h1>${safeTitle}</h1>
+  <p>${safeDesc}</p>
+  <img src="${safeImage}" alt="${safeTitle}" style="max-width:600px" />
+  <p><a href="${safeUrl}">${SITE_NAME} üzerinde görüntüle</a></p>
+</body>
+</html>`;
+}
+
+exports.ogStorePreview = functions.https.onRequest(async (req, res) => {
+  try {
+    const path = req.path;
+    const parts = path.split("/").filter(Boolean);
+
+    if (parts.length < 2) {
+      res.redirect(`https://${DOMAIN}/`);
+      return;
+    }
+
+    const storeSlug = parts[1];
+    const productSlug = parts.length >= 3 ? parts[2] : null;
+
+    if (storeSlug === "form" || storeSlug === "_layout") {
+      res.redirect(`https://${DOMAIN}${path}`);
+      return;
+    }
+
+    let storeData = null;
+
+    const storeSnapshot = await db
+      .collection("stores")
+      .where("slug", "==", storeSlug)
+      .limit(1)
+      .get();
+
+    if (!storeSnapshot.empty) {
+      const doc = storeSnapshot.docs[0];
+      storeData = doc.data();
+    } else {
+      const storeDoc = await db.collection("stores").doc(storeSlug).get();
+      if (storeDoc.exists) {
+        storeData = storeDoc.data();
+      }
+    }
+
+    if (!storeData) {
+      res.redirect(`https://${DOMAIN}/`);
+      return;
+    }
+
+    if (productSlug && productSlug !== "form") {
+      const products = storeData.products || [];
+      const product = products.find((p) => {
+        const pSlug = slugify(p.name || "");
+        return pSlug === productSlug;
+      });
+
+      if (product) {
+        const productImage =
+          (product.images && product.images.length > 0 ? product.images[0] : null) ||
+          product.image ||
+          storeData.avatar ||
+          DEFAULT_IMAGE;
+
+        const html = buildOgHtml({
+          title: `${product.name} - ${storeData.name}`,
+          description: product.description || `${product.name} - ${product.price} | ${storeData.name}`,
+          image: productImage,
+          url: `https://${DOMAIN}/store/${storeSlug}/${productSlug}`,
+          type: "product",
+        });
+        res.status(200).send(html);
+        return;
+      }
+    }
+
+    const html = buildOgHtml({
+      title: `${storeData.name} - ${SITE_NAME}`,
+      description: storeData.description || DEFAULT_DESCRIPTION,
+      image: storeData.avatar || storeData.coverImage || DEFAULT_IMAGE,
+      url: `https://${DOMAIN}/store/${storeSlug}`,
+      type: "profile",
+    });
+    res.status(200).send(html);
+  } catch (error) {
+    console.error("OG preview error:", error);
+    res.redirect(`https://${DOMAIN}/`);
+  }
+});
+
+exports.ogProductPreview = functions.https.onRequest(async (req, res) => {
+  try {
+    const path = req.path;
+    const parts = path.split("/").filter(Boolean);
+
+    if (parts.length < 2) {
+      res.redirect(`https://${DOMAIN}/`);
+      return;
+    }
+
+    const productId = parts[1];
+
+    const storesSnapshot = await db.collection("stores").get();
+    let foundProduct = null;
+    let foundStore = null;
+
+    for (const storeDoc of storesSnapshot.docs) {
+      const storeData = storeDoc.data();
+      const products = storeData.products || [];
+      const product = products.find((p) => p.id === productId);
+      if (product) {
+        foundProduct = product;
+        foundStore = { id: storeDoc.id, ...storeData };
+        break;
+      }
+    }
+
+    if (!foundProduct || !foundStore) {
+      res.redirect(`https://${DOMAIN}/`);
+      return;
+    }
+
+    const productImage =
+      (foundProduct.images && foundProduct.images.length > 0 ? foundProduct.images[0] : null) ||
+      foundProduct.image ||
+      foundStore.avatar ||
+      DEFAULT_IMAGE;
+
+    const storeSlug = foundStore.slug || slugify(foundStore.name || "");
+    const productSlug = slugify(foundProduct.name || "");
+
+    const html = buildOgHtml({
+      title: `${foundProduct.name} - ${foundStore.name}`,
+      description: foundProduct.description || `${foundProduct.name} - ${foundProduct.price} | ${foundStore.name}`,
+      image: productImage,
+      url: `https://${DOMAIN}/store/${storeSlug}/${productSlug}`,
+      type: "product",
+    });
+    res.status(200).send(html);
+  } catch (error) {
+    console.error("OG product preview error:", error);
+    res.redirect(`https://${DOMAIN}/`);
+  }
+});

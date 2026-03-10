@@ -5,6 +5,10 @@
   "storage": {
     "rules": "storage.rules"
   },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs18"
+  },
   "hosting": {
     "public": "dist",
     "ignore": [
@@ -13,6 +17,14 @@
       "**/node_modules/**"
     ],
     "rewrites": [
+      {
+        "source": "/store/**",
+        "function": "ogStorePreview"
+      },
+      {
+        "source": "/product/**",
+        "function": "ogProductPreview"
+      },
       {
         "source": "**",
         "destination": "/index.html"
