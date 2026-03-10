@@ -8,14 +8,35 @@ const db = admin.firestore();
 
 const BOT_UA_REGEX = /facebookexternalhit|Twitterbot|WhatsApp|LinkedInBot|Slackbot|TelegramBot|Googlebot|bingbot|Discordbot|Baiduspider|YandexBot|Pinterestbot|redditbot|Applebot|Embedly|Quora Link Preview|Showyoubot|outbrain|vkShare|W3C_Validator|kakaotalk-scrap|developers\.google\.com\/\+\/web\/snippet/i;
 
+const https = require("https");
+
 let cachedIndexHtml = null;
-function getIndexHtml() {
+
+function fetchIndexHtmlFromHosting() {
+  return new Promise((resolve, reject) => {
+    https.get(`https://${DOMAIN}/index.html`, (resp) => {
+      if (resp.statusCode !== 200) {
+        reject(new Error(`Status ${resp.statusCode}`));
+        return;
+      }
+      let data = "";
+      resp.on("data", (chunk) => (data += chunk));
+      resp.on("end", () => resolve(data));
+    }).on("error", reject);
+  });
+}
+
+async function getIndexHtml() {
   if (cachedIndexHtml) return cachedIndexHtml;
   try {
     const indexPath = path.join(__dirname, "..", "dist", "index.html");
     cachedIndexHtml = fs.readFileSync(indexPath, "utf8");
   } catch (e) { // eslint-disable-line no-unused-vars
-    cachedIndexHtml = null;
+    try {
+      cachedIndexHtml = await fetchIndexHtmlFromHosting();
+    } catch (e2) { // eslint-disable-line no-unused-vars
+      cachedIndexHtml = null;
+    }
   }
   return cachedIndexHtml;
 }
@@ -24,9 +45,10 @@ function isBot(userAgent) {
   return BOT_UA_REGEX.test(userAgent || "");
 }
 
-function serveIndexOrRedirect(req, res) {
-  const html = getIndexHtml();
+async function serveIndexOrRedirect(req, res) {
+  const html = await getIndexHtml();
   if (html) {
+    res.set("Cache-Control", "public, max-age=600, s-maxage=600");
     res.status(200).send(html);
   } else {
     res.redirect(`https://${DOMAIN}/`);
@@ -117,7 +139,7 @@ exports.ogStorePreview = functions.https.onRequest(async (req, res) => {
   try {
     const ua = req.headers["user-agent"] || "";
     if (!isBot(ua)) {
-      serveIndexOrRedirect(req, res);
+      await serveIndexOrRedirect(req, res);
       return;
     }
 
@@ -204,7 +226,7 @@ exports.ogProductPreview = functions.https.onRequest(async (req, res) => {
   try {
     const ua = req.headers["user-agent"] || "";
     if (!isBot(ua)) {
-      serveIndexOrRedirect(req, res);
+      await serveIndexOrRedirect(req, res);
       return;
     }
 
