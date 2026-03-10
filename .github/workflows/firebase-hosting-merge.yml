@@ -1,23 +1,23 @@
 name: Deploy to Firebase Hosting and Functions on merge
 on:
-push:
-  branches:
-    - main
+  push:
+    branches:
+      - main
 jobs:
-build_and_deploy:
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - run: npm install --legacy-peer-deps && npx expo export -p web
-    - uses: FirebaseExtended/action-hosting-deploy@v0
-      with:
-        repoToken: ${{ secrets.GITHUB_TOKEN }}
-        firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BUTIKBIZ_66195 }}
-        channelId: live
-        projectId: butikbiz-66195
-    - name: Deploy Functions
-      run: |
-        cd functions && npm install
-        npx firebase-tools deploy --only functions --project butikbiz-66195
-      env:
-        GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BUTIKBIZ_66195 }}
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --legacy-peer-deps && npx expo export -p web
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BUTIKBIZ_66195 }}
+          channelId: live
+          projectId: butikbiz-66195
+      - name: Deploy Functions
+        run: |
+          cd functions && npm install
+          npx firebase-tools deploy --only functions --project butikbiz-66195
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BUTIKBIZ_66195 }}
