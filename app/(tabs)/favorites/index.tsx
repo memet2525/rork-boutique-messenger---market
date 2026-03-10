@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,10 +7,12 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Animated,
+  Dimensions,
 } from "react-native";
 import { Image } from "expo-image";
 import { RelativePathString, useRouter } from "expo-router";
-import { Heart, Store, RefreshCw, ChevronRight, Users } from "lucide-react-native";
+import { Heart, Store, RefreshCw, ChevronRight, Users, ShoppingBag } from "lucide-react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
@@ -18,6 +20,8 @@ import { useAlert } from "@/contexts/AlertContext";
 import { useUser, type FavoriteProductSnapshot, type StoreProduct } from "@/contexts/UserContext";
 import { stores as mockStores, type Product } from "@/mocks/stores";
 import { getFirestoreStores } from "@/services/firestore";
+
+type TabType = "favorites" | "following";
 
 interface ResolvedStore {
   id: string;
@@ -109,6 +113,8 @@ function buildChangeLabels(snapshot: FavoriteProductSnapshot, currentProduct: Pr
   return labels;
 }
 
+const SCREEN_WIDTH = Dimensions.get("window").width;
+
 export default function FavoritesScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -121,6 +127,17 @@ export default function FavoritesScreen() {
     toggleFavorite,
   } = useUser();
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<TabType>("favorites");
+  const indicatorAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(indicatorAnim, {
+      toValue: activeTab === "favorites" ? 0 : 1,
+      useNativeDriver: true,
+      tension: 300,
+      friction: 30,
+    }).start();
+  }, [activeTab, indicatorAnim]);
 
   const firestoreStoresQuery = useQuery({
     queryKey: ["favoriteStoresFeed"],
@@ -238,6 +255,11 @@ export default function FavoritesScreen() {
     return favoriteItems.filter((item) => item.changeLabels.length > 0).length;
   }, [favoriteItems]);
 
+  const followingStores = useMemo(() => {
+    const ids = Array.isArray(profile.followingStores) ? profile.followingStores : [];
+    return allStores.filter((s) => ids.includes(s.id) || ids.includes(s.ownerId));
+  }, [profile.followingStores, allStores]);
+
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -302,11 +324,6 @@ export default function FavoritesScreen() {
     });
   }, [normalizedSnapshots, showAlert, updateProfile]);
 
-  const followingStores = useMemo(() => {
-    const ids = Array.isArray(profile.followingStores) ? profile.followingStores : [];
-    return allStores.filter((s) => ids.includes(s.id) || ids.includes(s.ownerId));
-  }, [profile.followingStores, allStores]);
-
   const handleOpenStore = useCallback((store: ResolvedStore) => {
     router.push({
       pathname: "/store/[id]" as RelativePathString,
@@ -314,93 +331,70 @@ export default function FavoritesScreen() {
     });
   }, [router]);
 
-  const renderHeader = useMemo(() => {
-    return (
-      <View style={styles.headerWrap}>
-        <View style={styles.cardsRow}>
-          <View style={[styles.miniCard, styles.favMiniCard]}>
-            <View style={styles.miniCardIcon}>
-              <Heart size={18} color={Colors.danger} fill={Colors.danger} />
-            </View>
-            <Text style={styles.miniCardValue}>{favoriteItems.length}</Text>
-            <Text style={styles.miniCardLabel}>Favori ürün</Text>
-            <View style={styles.miniCardDivider} />
-            <View style={styles.miniCardRow}>
-              <RefreshCw size={12} color={Colors.danger} />
-              <Text style={styles.miniCardSub}>{changedCount} değişiklik</Text>
-            </View>
-          </View>
+  const switchTab = useCallback((tab: TabType) => {
+    setActiveTab(tab);
+  }, []);
 
-          <TouchableOpacity
-            style={[styles.miniCard, styles.storeMiniCard]}
-            activeOpacity={0.85}
-            onPress={() => {
-              if (followingStores.length > 0) {
-                handleOpenStore(followingStores[0]);
-              }
-            }}
-          >
-            <View style={styles.miniCardIcon}>
-              <Users size={18} color={Colors.primary} />
-            </View>
-            <Text style={styles.miniCardValue}>{followingStores.length}</Text>
-            <Text style={styles.miniCardLabel}>Takip edilen</Text>
-            <View style={styles.miniCardDivider} />
-            {followingStores.length > 0 ? (
-              <View style={styles.storeAvatarRow}>
-                {followingStores.slice(0, 3).map((s) => (
-                  <Image
-                    key={s.id}
-                    source={{ uri: s.avatar }}
-                    style={styles.storeAvatarMini}
-                  />
-                ))}
-                {followingStores.length > 3 ? (
-                  <View style={styles.storeAvatarMore}>
-                    <Text style={styles.storeAvatarMoreText}>+{followingStores.length - 3}</Text>
-                  </View>
-                ) : null}
-              </View>
-            ) : (
-              <View style={styles.miniCardRow}>
-                <Store size={12} color={Colors.textLight} />
-                <Text style={styles.miniCardSub}>Henüz yok</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
+  const tabIndicatorTranslateX = indicatorAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, (SCREEN_WIDTH - 32 - 8) / 2],
+  });
 
-        {followingStores.length > 0 ? (
-          <View style={styles.followingSection}>
-            <View style={styles.followingSectionHeader}>
-              <Text style={styles.followingSectionTitle}>Takip Ettiklerin</Text>
-              <Text style={styles.followingSectionCount}>{followingStores.length} mağaza</Text>
+  const renderTabBar = () => (
+    <View style={styles.tabBarContainer}>
+      <View style={styles.tabBarInner}>
+        <Animated.View
+          style={[
+            styles.tabIndicator,
+            { transform: [{ translateX: tabIndicatorTranslateX }] },
+          ]}
+        />
+        <TouchableOpacity
+          style={styles.tabButton}
+          activeOpacity={0.7}
+          onPress={() => switchTab("favorites")}
+          testID="tab-favorites"
+        >
+          <Heart
+            size={16}
+            color={activeTab === "favorites" ? Colors.danger : Colors.textLight}
+            fill={activeTab === "favorites" ? Colors.danger : "transparent"}
+          />
+          <Text style={[styles.tabButtonText, activeTab === "favorites" && styles.tabButtonTextActive]}>
+            Favorilerim
+          </Text>
+          {favoriteItems.length > 0 && (
+            <View style={[styles.tabBadge, activeTab === "favorites" ? styles.tabBadgeActive : styles.tabBadgeInactive]}>
+              <Text style={[styles.tabBadgeText, activeTab === "favorites" && styles.tabBadgeTextActive]}>
+                {favoriteItems.length}
+              </Text>
             </View>
-            <FlatList
-              data={followingStores}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.followingList}
-              renderItem={({ item: store }) => (
-                <TouchableOpacity
-                  style={styles.followingCard}
-                  activeOpacity={0.85}
-                  onPress={() => handleOpenStore(store)}
-                  testID={`following-store-${store.id}`}
-                >
-                  <Image source={{ uri: store.avatar }} style={styles.followingAvatar} />
-                  <Text style={styles.followingName} numberOfLines={1}>{store.name}</Text>
-                  <Text style={styles.followingCategory} numberOfLines={1}>{store.category}</Text>
-                  <View style={[styles.followingOnline, !store.isOnline && styles.followingOffline]} />
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        ) : null}
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.tabButton}
+          activeOpacity={0.7}
+          onPress={() => switchTab("following")}
+          testID="tab-following"
+        >
+          <Users
+            size={16}
+            color={activeTab === "following" ? Colors.primary : Colors.textLight}
+          />
+          <Text style={[styles.tabButtonText, activeTab === "following" && styles.tabButtonTextActive]}>
+            Takip Edilenler
+          </Text>
+          {followingStores.length > 0 && (
+            <View style={[styles.tabBadge, activeTab === "following" ? styles.tabBadgeActive : styles.tabBadgeInactive]}>
+              <Text style={[styles.tabBadgeText, activeTab === "following" && styles.tabBadgeTextActive]}>
+                {followingStores.length}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
-    );
-  }, [changedCount, favoriteItems.length, followingStores, handleOpenStore]);
+    </View>
+  );
 
   if (!isLoggedIn) {
     return (
@@ -420,278 +414,351 @@ export default function FavoritesScreen() {
     );
   }
 
-  return (
-    <FlatList
-      data={favoriteItems}
-      keyExtractor={(item) => item.snapshot.productId}
-      contentContainerStyle={favoriteItems.length === 0 ? styles.emptyListContent : styles.listContent}
-      ListHeaderComponent={renderHeader}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
-          tintColor={Colors.primary}
-          colors={[Colors.primary]}
-        />
-      }
-      ListEmptyComponent={
-        <View style={styles.emptyState}>
-          <Store size={42} color={Colors.textLight} />
-          <Text style={styles.emptyTitle}>Henüz favori ürünün yok</Text>
-          <Text style={styles.emptySubtitle}>Ürün detayındaki kalbe dokun, burada birikmeye başlasın.</Text>
-        </View>
-      }
-      renderItem={({ item }) => {
-        const previewImage = item.currentProduct?.image ?? item.snapshot.productImage;
-        const previewName = item.currentProduct?.name ?? (item.snapshot.productName || "Ürün");
-        const previewPrice = item.currentProduct?.price ?? (item.snapshot.productPrice || "Fiyat yok");
-        const hasChanges = item.changeLabels.length > 0;
-        const isUnavailable = item.currentProduct === null;
-
-        return (
-          <TouchableOpacity
-            style={styles.card}
-            activeOpacity={0.9}
-            onPress={() => handleOpenProduct(item)}
-            testID={`favorite-card-${item.snapshot.productId}`}
-          >
-            <Image source={{ uri: previewImage }} style={styles.cardImage} contentFit="cover" />
-            <View style={styles.cardBody}>
-              <View style={styles.cardTopRow}>
-                <View style={styles.storeBadge}>
-                  <Store size={12} color={Colors.primary} />
-                  <Text style={styles.storeBadgeText} numberOfLines={1}>{item.store.name}</Text>
-                </View>
-                <ChevronRight size={16} color={Colors.textLight} />
+  if (activeTab === "following") {
+    return (
+      <View style={styles.container}>
+        {renderTabBar()}
+        <FlatList
+          data={followingStores}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={followingStores.length === 0 ? styles.emptyListContent : styles.followingListContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={Colors.primary}
+              colors={[Colors.primary]}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyStateInner}>
+              <View style={styles.emptyIconWrap}>
+                <Users size={36} color={Colors.textLight} />
               </View>
-
-              <Text style={styles.productTitle} numberOfLines={2}>{previewName}</Text>
-              <Text style={styles.productPrice}>{previewPrice}</Text>
-
-              <View style={styles.statusRowWrap}>
-                <View style={[styles.statusChip, hasChanges ? styles.statusChipAlert : styles.statusChipStable]}>
-                  <Text style={[styles.statusChipText, hasChanges ? styles.statusChipTextAlert : styles.statusChipTextStable]}>
-                    {isUnavailable ? "Artık aktif değil" : hasChanges ? "Yeni değişiklik var" : "Takip güncel"}
+              <Text style={styles.emptyTitle}>Henüz takip ettiğin mağaza yok</Text>
+              <Text style={styles.emptySubtitle}>Mağaza profillerinden takip et butonuna dokun.</Text>
+            </View>
+          }
+          renderItem={({ item: store }) => (
+            <TouchableOpacity
+              style={styles.followingStoreCard}
+              activeOpacity={0.85}
+              onPress={() => handleOpenStore(store)}
+              testID={`following-store-${store.id}`}
+            >
+              <View style={styles.followingStoreLeft}>
+                <View style={styles.followingStoreAvatarWrap}>
+                  <Image source={{ uri: store.avatar }} style={styles.followingStoreAvatar} />
+                  <View style={[styles.onlineDot, !store.isOnline && styles.offlineDot]} />
+                </View>
+                <View style={styles.followingStoreInfo}>
+                  <Text style={styles.followingStoreName} numberOfLines={1}>{store.name}</Text>
+                  <Text style={styles.followingStoreCategory} numberOfLines={1}>{store.category}</Text>
+                  <Text style={styles.followingStoreProducts}>
+                    {store.products.length} ürün
                   </Text>
                 </View>
-                {item.snapshot.addedAt ? (
-                  <Text style={styles.addedAtText}>{new Date(item.snapshot.addedAt).toLocaleDateString("tr-TR")}</Text>
-                ) : null}
               </View>
+              <ChevronRight size={18} color={Colors.textLight} />
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+    );
+  }
 
-              {item.changeLabels.length > 0 ? (
-                <View style={styles.changeList}>
-                  {item.changeLabels.map((label) => (
-                    <View key={label} style={styles.changeChip}>
-                      <Text style={styles.changeChipText}>{label}</Text>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-
-              <View style={styles.actionRow}>
-                <TouchableOpacity
-                  style={[styles.secondaryButton, styles.removeButton]}
-                  onPress={() => handleUnfavorite(item)}
-                  testID={`favorite-remove-${item.snapshot.productId}`}
-                >
-                  <Text style={styles.removeButtonText}>Favoriden Çıkar</Text>
-                </TouchableOpacity>
-                {hasChanges && !isUnavailable ? (
-                  <TouchableOpacity
-                    style={[styles.secondaryButton, styles.syncButton]}
-                    onPress={() => handleSyncTracking(item)}
-                    testID={`favorite-sync-${item.snapshot.productId}`}
-                  >
-                    <Text style={styles.syncButtonText}>Takibi Güncelle</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
+  return (
+    <View style={styles.container}>
+      {renderTabBar()}
+      <FlatList
+        data={favoriteItems}
+        keyExtractor={(item) => item.snapshot.productId}
+        contentContainerStyle={favoriteItems.length === 0 ? styles.emptyListContent : styles.listContent}
+        ListHeaderComponent={
+          changedCount > 0 ? (
+            <View style={styles.changesInfoBar}>
+              <RefreshCw size={14} color={Colors.danger} />
+              <Text style={styles.changesInfoText}>{changedCount} üründe değişiklik var</Text>
             </View>
-          </TouchableOpacity>
-        );
-      }}
-    />
+          ) : null
+        }
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.primary}
+            colors={[Colors.primary]}
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyStateInner}>
+            <View style={styles.emptyIconWrap}>
+              <ShoppingBag size={36} color={Colors.textLight} />
+            </View>
+            <Text style={styles.emptyTitle}>Henüz favori ürünün yok</Text>
+            <Text style={styles.emptySubtitle}>Ürün detayındaki kalbe dokun, burada birikmeye başlasın.</Text>
+          </View>
+        }
+        renderItem={({ item }) => {
+          const previewImage = item.currentProduct?.image ?? item.snapshot.productImage;
+          const previewName = item.currentProduct?.name ?? (item.snapshot.productName || "Ürün");
+          const previewPrice = item.currentProduct?.price ?? (item.snapshot.productPrice || "Fiyat yok");
+          const hasChanges = item.changeLabels.length > 0;
+          const isUnavailable = item.currentProduct === null;
+
+          return (
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.9}
+              onPress={() => handleOpenProduct(item)}
+              testID={`favorite-card-${item.snapshot.productId}`}
+            >
+              <Image source={{ uri: previewImage }} style={styles.cardImage} contentFit="cover" />
+              <View style={styles.cardBody}>
+                <View style={styles.cardTopRow}>
+                  <View style={styles.storeBadge}>
+                    <Store size={12} color={Colors.primary} />
+                    <Text style={styles.storeBadgeText} numberOfLines={1}>{item.store.name}</Text>
+                  </View>
+                  <ChevronRight size={16} color={Colors.textLight} />
+                </View>
+
+                <Text style={styles.productTitle} numberOfLines={2}>{previewName}</Text>
+                <Text style={styles.productPrice}>{previewPrice}</Text>
+
+                <View style={styles.statusRowWrap}>
+                  <View style={[styles.statusChip, hasChanges ? styles.statusChipAlert : styles.statusChipStable]}>
+                    <Text style={[styles.statusChipText, hasChanges ? styles.statusChipTextAlert : styles.statusChipTextStable]}>
+                      {isUnavailable ? "Artık aktif değil" : hasChanges ? "Yeni değişiklik var" : "Takip güncel"}
+                    </Text>
+                  </View>
+                  {item.snapshot.addedAt ? (
+                    <Text style={styles.addedAtText}>{new Date(item.snapshot.addedAt).toLocaleDateString("tr-TR")}</Text>
+                  ) : null}
+                </View>
+
+                {item.changeLabels.length > 0 ? (
+                  <View style={styles.changeList}>
+                    {item.changeLabels.map((label) => (
+                      <View key={label} style={styles.changeChip}>
+                        <Text style={styles.changeChipText}>{label}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                <View style={styles.actionRow}>
+                  <TouchableOpacity
+                    style={[styles.secondaryButton, styles.removeButton]}
+                    onPress={() => handleUnfavorite(item)}
+                    testID={`favorite-remove-${item.snapshot.productId}`}
+                  >
+                    <Text style={styles.removeButtonText}>Favoriden Çıkar</Text>
+                  </TouchableOpacity>
+                  {hasChanges && !isUnavailable ? (
+                    <TouchableOpacity
+                      style={[styles.secondaryButton, styles.syncButton]}
+                      onPress={() => handleSyncTracking(item)}
+                      testID={`favorite-sync-${item.snapshot.productId}`}
+                    >
+                      <Text style={styles.syncButtonText}>Takibi Güncelle</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
+            </TouchableOpacity>
+          );
+        }}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  tabBarContainer: {
+    backgroundColor: Colors.white,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  tabBarInner: {
+    flexDirection: "row" as const,
+    backgroundColor: Colors.background,
+    borderRadius: 12,
+    padding: 4,
+    position: "relative" as const,
+  },
+  tabIndicator: {
+    position: "absolute" as const,
+    top: 4,
+    left: 4,
+    width: "50%" as const,
+    height: 40,
+    backgroundColor: Colors.white,
+    borderRadius: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  tabButton: {
+    flex: 1,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    height: 40,
+    borderRadius: 10,
+    gap: 6,
+    zIndex: 1,
+  },
+  tabButtonText: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    color: Colors.textLight,
+  },
+  tabButtonTextActive: {
+    color: Colors.text,
+    fontWeight: "700" as const,
+  },
+  tabBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    paddingHorizontal: 6,
+  },
+  tabBadgeActive: {
+    backgroundColor: "rgba(7, 94, 84, 0.12)",
+  },
+  tabBadgeInactive: {
+    backgroundColor: "rgba(0,0,0,0.06)",
+  },
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: "700" as const,
+    color: Colors.textSecondary,
+  },
+  tabBadgeTextActive: {
+    color: Colors.primary,
+  },
+  changesInfoBar: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 8,
+    backgroundColor: "rgba(239, 68, 68, 0.08)",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  changesInfoText: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    color: Colors.danger,
+  },
   listContent: {
     padding: 16,
     gap: 14,
     paddingBottom: 28,
-    backgroundColor: Colors.background,
+  },
+  followingListContent: {
+    padding: 16,
+    gap: 10,
+    paddingBottom: 28,
   },
   emptyListContent: {
     flexGrow: 1,
     padding: 16,
-    backgroundColor: Colors.background,
   },
-  headerWrap: {
-    marginBottom: 14,
-    gap: 14,
-  },
-  cardsRow: {
-    flexDirection: "row" as const,
+  emptyStateInner: {
+    flex: 1,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    paddingHorizontal: 28,
+    paddingTop: 80,
     gap: 10,
   },
-  miniCard: {
-    flex: 1,
-    backgroundColor: Colors.white,
-    borderRadius: 18,
-    padding: 14,
-    alignItems: "center" as const,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  favMiniCard: {
-    borderTopWidth: 3,
-    borderTopColor: Colors.danger,
-  },
-  storeMiniCard: {
-    borderTopWidth: 3,
-    borderTopColor: Colors.primary,
-  },
-  miniCardIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: Colors.background,
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.borderLight,
     alignItems: "center" as const,
     justifyContent: "center" as const,
     marginBottom: 8,
   },
-  miniCardValue: {
-    fontSize: 22,
-    fontWeight: "800" as const,
-    color: Colors.text,
-  },
-  miniCardLabel: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    fontWeight: "600" as const,
-    marginTop: 2,
-  },
-  miniCardDivider: {
-    width: "80%" as const,
-    height: 1,
-    backgroundColor: Colors.border,
-    marginVertical: 10,
-  },
-  miniCardRow: {
+  followingStoreCard: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 4,
-  },
-  miniCardSub: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    fontWeight: "500" as const,
-  },
-  storeAvatarRow: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-  },
-  storeAvatarMini: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: Colors.white,
-    marginLeft: -6,
-  },
-  storeAvatarMore: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Colors.background,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    marginLeft: -6,
-    borderWidth: 2,
-    borderColor: Colors.white,
-  },
-  storeAvatarMoreText: {
-    fontSize: 9,
-    fontWeight: "700" as const,
-    color: Colors.textSecondary,
-  },
-  followingSection: {
+    justifyContent: "space-between" as const,
     backgroundColor: Colors.white,
-    borderRadius: 18,
-    paddingVertical: 14,
+    borderRadius: 16,
+    padding: 14,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.04,
     shadowRadius: 10,
     elevation: 3,
   },
-  followingSectionHeader: {
+  followingStoreLeft: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    justifyContent: "space-between" as const,
-    paddingHorizontal: 14,
-    marginBottom: 12,
+    gap: 12,
+    flex: 1,
   },
-  followingSectionTitle: {
-    fontSize: 15,
-    fontWeight: "700" as const,
-    color: Colors.text,
-  },
-  followingSectionCount: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    fontWeight: "500" as const,
-  },
-  followingList: {
-    paddingHorizontal: 14,
-    gap: 10,
-  },
-  followingCard: {
-    width: 80,
-    alignItems: "center" as const,
+  followingStoreAvatarWrap: {
     position: "relative" as const,
   },
-  followingAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  followingStoreAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: Colors.border,
-    marginBottom: 6,
   },
-  followingName: {
-    fontSize: 11,
-    fontWeight: "600" as const,
-    color: Colors.text,
-    textAlign: "center" as const,
-  },
-  followingCategory: {
-    fontSize: 10,
-    color: Colors.textSecondary,
-    textAlign: "center" as const,
-    marginTop: 1,
-  },
-  followingOnline: {
+  onlineDot: {
     position: "absolute" as const,
-    top: 40,
-    right: 10,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    bottom: 1,
+    right: 1,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     backgroundColor: Colors.online,
     borderWidth: 2,
     borderColor: Colors.white,
   },
-  followingOffline: {
+  offlineDot: {
     backgroundColor: Colors.textLight,
+  },
+  followingStoreInfo: {
+    flex: 1,
+  },
+  followingStoreName: {
+    fontSize: 15,
+    fontWeight: "700" as const,
+    color: Colors.text,
+  },
+  followingStoreCategory: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  followingStoreProducts: {
+    fontSize: 11,
+    color: Colors.textLight,
+    marginTop: 2,
   },
   card: {
     backgroundColor: Colors.white,
     borderRadius: 22,
-    overflow: "hidden",
+    overflow: "hidden" as const,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.05,
@@ -699,7 +766,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   cardImage: {
-    width: "100%",
+    width: "100%" as const,
     height: 190,
     backgroundColor: Colors.border,
   },
@@ -707,16 +774,16 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   cardTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
     gap: 10,
   },
   storeBadge: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
     gap: 6,
-    maxWidth: "88%",
+    maxWidth: "88%" as const,
     backgroundColor: "rgba(7, 94, 84, 0.08)",
     borderRadius: 999,
     paddingHorizontal: 10,
@@ -741,9 +808,9 @@ const styles = StyleSheet.create({
   },
   statusRowWrap: {
     marginTop: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: "row" as const,
+    justifyContent: "space-between" as const,
+    alignItems: "center" as const,
     gap: 10,
   },
   statusChip: {
@@ -772,8 +839,8 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
   },
   changeList: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    flexDirection: "row" as const,
+    flexWrap: "wrap" as const,
     gap: 8,
     marginTop: 14,
   },
@@ -789,7 +856,7 @@ const styles = StyleSheet.create({
     color: "#C2410C",
   },
   actionRow: {
-    flexDirection: "row",
+    flexDirection: "row" as const,
     gap: 10,
     marginTop: 16,
   },
@@ -797,8 +864,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 44,
     borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
     paddingHorizontal: 12,
   },
   removeButton: {
@@ -819,28 +886,28 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
     paddingHorizontal: 28,
     gap: 10,
     backgroundColor: Colors.background,
   },
   loadingState: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
     backgroundColor: Colors.background,
   },
   emptyTitle: {
     fontSize: 20,
     fontWeight: "800" as const,
     color: Colors.text,
-    textAlign: "center",
+    textAlign: "center" as const,
   },
   emptySubtitle: {
     fontSize: 14,
     lineHeight: 21,
-    textAlign: "center",
+    textAlign: "center" as const,
     color: Colors.textSecondary,
   },
 });
