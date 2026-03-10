@@ -500,13 +500,22 @@ export default function ChatDetailScreen() {
           hasInjectedProduct.current = true;
 
           let decodedProductImage: string | undefined;
-          try {
-            decodedProductImage = productImage ? decodeURIComponent(productImage) : undefined;
-          } catch (e) {
-            console.log("Product image decode error, using raw:", e);
-            decodedProductImage = productImage || undefined;
+          if (productImage && productImage.trim().length > 0) {
+            try {
+              const decoded = decodeURIComponent(productImage);
+              if (decoded.startsWith("http://") || decoded.startsWith("https://")) {
+                decodedProductImage = decoded;
+              } else if (productImage.startsWith("http://") || productImage.startsWith("https://")) {
+                decodedProductImage = productImage;
+              }
+            } catch (e) {
+              console.log("Product image decode error, using raw:", e);
+              if (productImage.startsWith("http://") || productImage.startsWith("https://")) {
+                decodedProductImage = productImage;
+              }
+            }
           }
-          console.log("Sending product message with image:", id, "decoded:", decodedProductImage, "raw param:", productImage);
+          console.log("Sending product message with image:", id, "decoded:", decodedProductImage?.substring(0, 100), "raw param:", productImage?.substring(0, 100));
           sendMessageMutate({
             text: productMessage,
             productImage: decodedProductImage || undefined,

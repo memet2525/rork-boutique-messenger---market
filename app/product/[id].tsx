@@ -259,20 +259,27 @@ export default function ProductDetailScreen() {
 
   const bestProductImage = useMemo(() => {
     if (!productData) return "";
+    const isValidUrl = (val: unknown): val is string =>
+      typeof val === "string" && val.trim().length > 5 && (val.trim().startsWith("http://") || val.trim().startsWith("https://"));
+
     const imgs = (productData as any).images as string[] | undefined;
     if (imgs && Array.isArray(imgs)) {
       for (const img of imgs) {
-        if (img && typeof img === "string" && img.trim().length > 0 && img.startsWith("http")) {
+        if (isValidUrl(img)) {
+          console.log("bestProductImage: found from images array:", img.substring(0, 80));
           return img.trim();
         }
       }
     }
-    if (productData.image && typeof productData.image === "string" && productData.image.trim().length > 0 && productData.image.startsWith("http")) {
+    if (isValidUrl(productData.image)) {
+      console.log("bestProductImage: found from image field:", productData.image.substring(0, 80));
       return productData.image.trim();
     }
-    if (storeData?.avatar && typeof storeData.avatar === "string" && storeData.avatar.trim().length > 0 && storeData.avatar.startsWith("http")) {
-      return storeData.avatar.trim();
+    if (isValidUrl(storeData?.avatar)) {
+      console.log("bestProductImage: fallback to store avatar:", storeData!.avatar.substring(0, 80));
+      return storeData!.avatar.trim();
     }
+    console.log("bestProductImage: no valid image found for product:", productData.name, "image field:", productData.image, "images:", imgs);
     return "";
   }, [productData, storeData]);
 

@@ -84,24 +84,46 @@ function escapeHtml(text) {
     .replace(/'/g, "&#039;");
 }
 
+function isValidHttpUrl(val) {
+  return val && typeof val === "string" && val.trim().length > 5 && (val.trim().startsWith("http://") || val.trim().startsWith("https://"));
+}
+
 function getValidImageUrl(product, store) {
   if (product) {
     if (Array.isArray(product.images)) {
       for (const img of product.images) {
-        if (img && typeof img === "string" && img.trim().length > 0 && img.startsWith("http")) {
+        if (isValidHttpUrl(img)) {
           return img.trim();
         }
       }
     }
-    if (product.image && typeof product.image === "string" && product.image.trim().length > 0 && product.image.startsWith("http")) {
+    if (isValidHttpUrl(product.image)) {
       return product.image.trim();
+    }
+    if (isValidHttpUrl(product.imageUrl)) {
+      return product.imageUrl.trim();
+    }
+    if (isValidHttpUrl(product.thumbnail)) {
+      return product.thumbnail.trim();
     }
   }
   if (store) {
-    if (store.avatar && typeof store.avatar === "string" && store.avatar.trim().length > 0 && store.avatar.startsWith("http")) {
+    if (Array.isArray(store.products)) {
+      for (const p of store.products) {
+        if (product && p.id === product.id) continue;
+        if (isValidHttpUrl(p.image)) return p.image.trim();
+        if (Array.isArray(p.images)) {
+          for (const img of p.images) {
+            if (isValidHttpUrl(img)) return img.trim();
+          }
+        }
+        break;
+      }
+    }
+    if (isValidHttpUrl(store.avatar)) {
       return store.avatar.trim();
     }
-    if (store.coverImage && typeof store.coverImage === "string" && store.coverImage.trim().length > 0 && store.coverImage.startsWith("http")) {
+    if (isValidHttpUrl(store.coverImage)) {
       return store.coverImage.trim();
     }
   }
@@ -212,13 +234,22 @@ exports.ogStorePreview = functions.https.onRequest(async (req, res) => {
 
     if (productSlug && productSlug !== "form") {
       const products = storeData.products || [];
-      const product = products.find((p) => {
+      const normalizedSlug = productSlug.toLowerCase();
+      let product = products.find((p) => {
         const pSlug = slugify(p.name || "");
-        return pSlug === productSlug;
+        return pSlug === normalizedSlug;
       });
+
+      if (!product) {
+        product = products.find((p) => {
+          const pSlug = slugify(p.name || "");
+          return pSlug.includes(normalizedSlug) || normalizedSlug.includes(pSlug);
+        });
+      }
 
       if (product) {
         const productImage = getValidImageUrl(product, storeData);
+        console.log("OG product found:", product.name, "image:", productImage, "slug:", normalizedSlug);
 
         const html = buildOgHtml({
           title: `${product.name} - ${storeData.name}`,
@@ -227,8 +258,11 @@ exports.ogStorePreview = functions.https.onRequest(async (req, res) => {
           url: `https://${DOMAIN}/store/${storeSlug}/${productSlug}`,
           type: "product",
         });
+        res.set("Cache-Control", "public, max-age=300, s-maxage=300");
         res.status(200).send(html);
         return;
+      } else {
+        console.log("OG product NOT found for slug:", normalizedSlug, "in store:", storeSlug, "products count:", products.length, "product slugs:", products.map(p => slugify(p.name || "")).join(", "));
       }
     }
 
@@ -239,10 +273,18 @@ exports.ogStorePreview = functions.https.onRequest(async (req, res) => {
       url: `https://${DOMAIN}/store/${storeSlug}`,
       type: "profile",
     });
+    res.set("Cache-Control", "public, max-age=300, s-maxage=300");
     res.status(200).send(html);
   } catch (error) {
     console.error("OG preview error:", error);
-    res.redirect(`https://${DOMAIN}/`);
+    const fallbackHtml = buildOgHtml({
+      title: `${SITE_NAME} - Online Butik Alışveriş`,
+      description: DEFAULT_DESCRIPTION,
+      image: DEFAULT_IMAGE,
+      url: `https://${DOMAIN}/`,
+      type: "website",
+    });
+    res.status(200).send(fallbackHtml);
   }
 });
 
@@ -296,9 +338,17 @@ exports.ogProductPreview = functions.https.onRequest(async (req, res) => {
       url: `https://${DOMAIN}/store/${storeSlug}/${productSlug}`,
       type: "product",
     });
+    res.set("Cache-Control", "public, max-age=300, s-maxage=300");
     res.status(200).send(html);
   } catch (error) {
     console.error("OG product preview error:", error);
-    res.redirect(`https://${DOMAIN}/`);
+    const fallbackHtml = buildOgHtml({
+      title: `${SITE_NAME} - Online Butik Alışveriş`,
+      description: DEFAULT_DESCRIPTION,
+      image: DEFAULT_IMAGE,
+      url: `https://${DOMAIN}/`,
+      type: "website",
+    });
+    res.status(200).send(fallbackHtml);
   }
 });
