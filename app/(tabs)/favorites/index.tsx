@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { RelativePathString, useRouter } from "expo-router";
-import { Heart, Store, RefreshCw, Clock3, ShoppingBag, ChevronRight } from "lucide-react-native";
+import { Heart, Store, RefreshCw, ChevronRight, Users } from "lucide-react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
@@ -302,39 +302,105 @@ export default function FavoritesScreen() {
     });
   }, [normalizedSnapshots, showAlert, updateProfile]);
 
+  const followingStores = useMemo(() => {
+    const ids = Array.isArray(profile.followingStores) ? profile.followingStores : [];
+    return allStores.filter((s) => ids.includes(s.id) || ids.includes(s.ownerId));
+  }, [profile.followingStores, allStores]);
+
+  const handleOpenStore = useCallback((store: ResolvedStore) => {
+    router.push({
+      pathname: "/store/[id]" as RelativePathString,
+      params: { id: store.ownerId || store.id },
+    });
+  }, [router]);
+
   const renderHeader = useMemo(() => {
     return (
       <View style={styles.headerWrap}>
-        <View style={styles.heroCard}>
-          <View style={styles.heroBadge}>
-            <Heart size={16} color={Colors.danger} fill={Colors.danger} />
-            <Text style={styles.heroBadgeText}>Takipte</Text>
-          </View>
-          <Text style={styles.heroTitle}>Favori ürünlerin tek ekranda</Text>
-          <Text style={styles.heroSubtitle}>
-            Favorilediğin ürünlerde fiyat, başlık, görsel ve açıklama değişirse burada hemen gör.
-          </Text>
-          <View style={styles.statRow}>
-            <View style={styles.statCard}>
-              <ShoppingBag size={16} color={Colors.primary} />
-              <Text style={styles.statValue}>{favoriteItems.length}</Text>
-              <Text style={styles.statLabel}>Favori ürün</Text>
+        <View style={styles.cardsRow}>
+          <View style={[styles.miniCard, styles.favMiniCard]}>
+            <View style={styles.miniCardIcon}>
+              <Heart size={18} color={Colors.danger} fill={Colors.danger} />
             </View>
-            <View style={styles.statCard}>
-              <RefreshCw size={16} color={Colors.danger} />
-              <Text style={styles.statValue}>{changedCount}</Text>
-              <Text style={styles.statLabel}>Değişiklik var</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Clock3 size={16} color="#2563EB" />
-              <Text style={styles.statValue}>15 sn</Text>
-              <Text style={styles.statLabel}>Takip aralığı</Text>
+            <Text style={styles.miniCardValue}>{favoriteItems.length}</Text>
+            <Text style={styles.miniCardLabel}>Favori ürün</Text>
+            <View style={styles.miniCardDivider} />
+            <View style={styles.miniCardRow}>
+              <RefreshCw size={12} color={Colors.danger} />
+              <Text style={styles.miniCardSub}>{changedCount} değişiklik</Text>
             </View>
           </View>
+
+          <TouchableOpacity
+            style={[styles.miniCard, styles.storeMiniCard]}
+            activeOpacity={0.85}
+            onPress={() => {
+              if (followingStores.length > 0) {
+                handleOpenStore(followingStores[0]);
+              }
+            }}
+          >
+            <View style={styles.miniCardIcon}>
+              <Users size={18} color={Colors.primary} />
+            </View>
+            <Text style={styles.miniCardValue}>{followingStores.length}</Text>
+            <Text style={styles.miniCardLabel}>Takip edilen</Text>
+            <View style={styles.miniCardDivider} />
+            {followingStores.length > 0 ? (
+              <View style={styles.storeAvatarRow}>
+                {followingStores.slice(0, 3).map((s) => (
+                  <Image
+                    key={s.id}
+                    source={{ uri: s.avatar }}
+                    style={styles.storeAvatarMini}
+                  />
+                ))}
+                {followingStores.length > 3 ? (
+                  <View style={styles.storeAvatarMore}>
+                    <Text style={styles.storeAvatarMoreText}>+{followingStores.length - 3}</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.miniCardRow}>
+                <Store size={12} color={Colors.textLight} />
+                <Text style={styles.miniCardSub}>Henüz yok</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
+
+        {followingStores.length > 0 ? (
+          <View style={styles.followingSection}>
+            <View style={styles.followingSectionHeader}>
+              <Text style={styles.followingSectionTitle}>Takip Ettiklerin</Text>
+              <Text style={styles.followingSectionCount}>{followingStores.length} mağaza</Text>
+            </View>
+            <FlatList
+              data={followingStores}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.followingList}
+              renderItem={({ item: store }) => (
+                <TouchableOpacity
+                  style={styles.followingCard}
+                  activeOpacity={0.85}
+                  onPress={() => handleOpenStore(store)}
+                  testID={`following-store-${store.id}`}
+                >
+                  <Image source={{ uri: store.avatar }} style={styles.followingAvatar} />
+                  <Text style={styles.followingName} numberOfLines={1}>{store.name}</Text>
+                  <Text style={styles.followingCategory} numberOfLines={1}>{store.category}</Text>
+                  <View style={[styles.followingOnline, !store.isOnline && styles.followingOffline]} />
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        ) : null}
       </View>
     );
-  }, [changedCount, favoriteItems.length]);
+  }, [changedCount, favoriteItems.length, followingStores, handleOpenStore]);
 
   if (!isLoggedIn) {
     return (
@@ -463,68 +529,164 @@ const styles = StyleSheet.create({
   },
   headerWrap: {
     marginBottom: 14,
+    gap: 14,
   },
-  heroCard: {
+  cardsRow: {
+    flexDirection: "row" as const,
+    gap: 10,
+  },
+  miniCard: {
+    flex: 1,
     backgroundColor: Colors.white,
-    borderRadius: 24,
-    padding: 18,
+    borderRadius: 18,
+    padding: 14,
+    alignItems: "center" as const,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 3,
   },
-  heroBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    gap: 8,
-    backgroundColor: "rgba(239, 68, 68, 0.08)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    marginBottom: 14,
+  favMiniCard: {
+    borderTopWidth: 3,
+    borderTopColor: Colors.danger,
   },
-  heroBadgeText: {
-    color: Colors.danger,
-    fontSize: 12,
-    fontWeight: "700" as const,
+  storeMiniCard: {
+    borderTopWidth: 3,
+    borderTopColor: Colors.primary,
   },
-  heroTitle: {
-    fontSize: 24,
+  miniCardIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: Colors.background,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    marginBottom: 8,
+  },
+  miniCardValue: {
+    fontSize: 22,
     fontWeight: "800" as const,
     color: Colors.text,
-    letterSpacing: -0.4,
   },
-  heroSubtitle: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 21,
+  miniCardLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontWeight: "600" as const,
+    marginTop: 2,
+  },
+  miniCardDivider: {
+    width: "80%" as const,
+    height: 1,
+    backgroundColor: Colors.border,
+    marginVertical: 10,
+  },
+  miniCardRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 4,
+  },
+  miniCardSub: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    fontWeight: "500" as const,
+  },
+  storeAvatarRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+  },
+  storeAvatarMini: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: Colors.white,
+    marginLeft: -6,
+  },
+  storeAvatarMore: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.background,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    marginLeft: -6,
+    borderWidth: 2,
+    borderColor: Colors.white,
+  },
+  storeAvatarMoreText: {
+    fontSize: 9,
+    fontWeight: "700" as const,
     color: Colors.textSecondary,
   },
-  statRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 18,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: Colors.background,
+  followingSection: {
+    backgroundColor: Colors.white,
     borderRadius: 18,
     paddingVertical: 14,
-    paddingHorizontal: 12,
-    alignItems: "center",
-    gap: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 3,
   },
-  statValue: {
-    fontSize: 18,
-    fontWeight: "800" as const,
+  followingSectionHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    paddingHorizontal: 14,
+    marginBottom: 12,
+  },
+  followingSectionTitle: {
+    fontSize: 15,
+    fontWeight: "700" as const,
     color: Colors.text,
   },
-  statLabel: {
-    fontSize: 11,
-    textAlign: "center",
+  followingSectionCount: {
+    fontSize: 12,
     color: Colors.textSecondary,
+    fontWeight: "500" as const,
+  },
+  followingList: {
+    paddingHorizontal: 14,
+    gap: 10,
+  },
+  followingCard: {
+    width: 80,
+    alignItems: "center" as const,
+    position: "relative" as const,
+  },
+  followingAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.border,
+    marginBottom: 6,
+  },
+  followingName: {
+    fontSize: 11,
+    fontWeight: "600" as const,
+    color: Colors.text,
+    textAlign: "center" as const,
+  },
+  followingCategory: {
+    fontSize: 10,
+    color: Colors.textSecondary,
+    textAlign: "center" as const,
+    marginTop: 1,
+  },
+  followingOnline: {
+    position: "absolute" as const,
+    top: 40,
+    right: 10,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.online,
+    borderWidth: 2,
+    borderColor: Colors.white,
+  },
+  followingOffline: {
+    backgroundColor: Colors.textLight,
   },
   card: {
     backgroundColor: Colors.white,
