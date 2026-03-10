@@ -12,6 +12,7 @@ import {
   FlatList,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  Modal,
 } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter, Stack, RelativePathString } from "expo-router";
@@ -41,12 +42,17 @@ export default function ProductDetailScreen() {
   const { profile, isLoggedIn, uid, toggleFavorite: toggleFavoriteProduct } = useUser();
   const { showAlert } = useAlert();
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
+  const [imageViewerVisible, setImageViewerVisible] = useState<boolean>(false);
+  const [viewerImageIndex, setViewerImageIndex] = useState<number>(0);
+  const viewerOpacity = useRef(new Animated.Value(0)).current;
+  const viewerScale = useRef(new Animated.Value(0.85)).current;
   const heartScale = useRef(new Animated.Value(1)).current;
   const favoritePulse = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = Dimensions.get("window");
+  const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
   const imageHeight = windowWidth * 0.85;
+  const viewerImageHeight = windowHeight * 0.75;
 
   React.useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -156,6 +162,33 @@ export default function ProductDetailScreen() {
     },
     [windowWidth]
   );
+
+  const onViewerScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const x = e.nativeEvent.contentOffset.x;
+      const index = Math.round(x / windowWidth);
+      setViewerImageIndex(index);
+    },
+    [windowWidth]
+  );
+
+  const openImageViewer = useCallback((index: number) => {
+    setViewerImageIndex(index);
+    setImageViewerVisible(true);
+    Animated.parallel([
+      Animated.timing(viewerOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.spring(viewerScale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 4 }),
+    ]).start();
+  }, [viewerOpacity, viewerScale]);
+
+  const closeImageViewer = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(viewerOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
+      Animated.timing(viewerScale, { toValue: 0.85, duration: 180, useNativeDriver: true }),
+    ]).start(() => {
+      setImageViewerVisible(false);
+    });
+  }, [viewerOpacity, viewerScale]);
 
   const handleToggleFavorite = useCallback(() => {
     if (!productData) {
@@ -351,12 +384,14 @@ export default function ProductDetailScreen() {
                 onScroll={onImageScroll}
                 scrollEventThrottle={16}
                 keyExtractor={(item, index) => `${item}-${index}`}
-                renderItem={({ item }) => (
-                  <Image
-                    source={{ uri: item }}
-                    style={[styles.productImage, { width: windowWidth, height: imageHeight }]}
-                    contentFit="cover"
-                  />
+                renderItem={({ item, index }) => (
+                  <TouchableOpacity activeOpacity={0.9} onPress={() => openImageViewer(index)}>
+                    <Image
+                      source={{ uri: item }}
+                      style={[styles.productImage, { width: windowWidth, height: imageHeight }]}
+                      contentFit="cover"
+                    />
+                  </TouchableOpacity>
                 )}
               />
               <View style={styles.pagination}>
@@ -372,11 +407,13 @@ export default function ProductDetailScreen() {
               </View>
             </>
           ) : (
-            <Image
-              source={{ uri: productData.image }}
-              style={[styles.productImage, { width: windowWidth, height: imageHeight }]}
-              contentFit="cover"
-            />
+            <TouchableOpacity activeOpacity={0.9} onPress={() => openImageViewer(0)}>
+              <Image
+                source={{ uri: productData.image }}
+                style={[styles.productImage, { width: windowWidth, height: imageHeight }]}
+                contentFit="cover"
+              />
+            </TouchableOpacity>
           )}
 
           <TouchableOpacity
@@ -494,6 +531,93 @@ export default function ProductDetailScreen() {
 
           <View style={{ height: 100 }} />
         </ScrollView>
+
+        <Modal
+          visible={imageViewerVisible}
+          transparent
+          animationType="none"
+          onRequestClose={closeImageViewer}
+          statusBarTranslucent
+        >
+          <Animated.View style={[styles.viewerOverlay, { opacity: viewerOpacity }]}>
+            <TouchableOpacity
+              style={styles.viewerCloseArea}
+              activeOpacity={1}
+              onPress={closeImageViewer}
+            />
+            <Animated.View
+              style={[
+                styles.viewerContent,
+                {
+                  height: viewerImageHeight,
+                  transform: [{ scale: viewerScale }],
+                },
+              ]}
+            >
+              {productImages.length > 1 ? (
+                <>
+                  <FlatList
+                    data={productImages}
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    onScroll={onViewerScroll}
+                    scrollEventThrottle={16}
+                    initialScrollIndex={viewerImageIndex}
+                    getItemLayout={(_, index) => ({
+                      length: windowWidth - 32,
+                      offset: (windowWidth - 32) * index,
+                      index,
+                    })}
+                    keyExtractor={(item, index) => `viewer-${item}-${index}`}
+                    renderItem={({ item }) => (
+                      <Image
+                        source={{ uri: item }}
+                        style={[
+                          styles.viewerImage,
+                          { width: windowWidth - 32, height: viewerImageHeight },
+                        ]}
+                        contentFit="contain"
+                      />
+                    )}
+                  />
+                  <View style={styles.viewerPagination}>
+                    {productImages.map((_, index) => (
+                      <View
+                        key={index}
+                        style={[
+                          styles.viewerDot,
+                          viewerImageIndex === index && styles.viewerDotActive,
+                        ]}
+                      />
+                    ))}
+                  </View>
+                </>
+              ) : (
+                <Image
+                  source={{ uri: productData.image }}
+                  style={[
+                    styles.viewerImage,
+                    { width: windowWidth - 32, height: viewerImageHeight },
+                  ]}
+                  contentFit="contain"
+                />
+              )}
+            </Animated.View>
+            <TouchableOpacity
+              style={styles.viewerCloseButton}
+              onPress={closeImageViewer}
+              testID="image-viewer-close"
+            >
+              <X size={24} color={Colors.white} />
+            </TouchableOpacity>
+            <View style={styles.viewerCounter}>
+              <Text style={styles.viewerCounterText}>
+                {viewerImageIndex + 1} / {productImages.length}
+              </Text>
+            </View>
+          </Animated.View>
+        </Modal>
 
         <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 20) }]}>
           <TouchableOpacity
@@ -755,5 +879,65 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700" as const,
     color: Colors.white,
+  },
+  viewerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  viewerCloseArea: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  viewerContent: {
+    width: "100%",
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  viewerImage: {
+    borderRadius: 12,
+    backgroundColor: "transparent",
+  },
+  viewerPagination: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 16,
+  },
+  viewerDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.35)",
+  },
+  viewerDotActive: {
+    backgroundColor: Colors.white,
+    width: 20,
+    borderRadius: 4,
+  },
+  viewerCloseButton: {
+    position: "absolute",
+    top: 54,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewerCounter: {
+    position: "absolute",
+    top: 60,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  viewerCounterText: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 14,
+    fontWeight: "600" as const,
   },
 });
