@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   Pressable,
   ActivityIndicator,
   GestureResponderEvent,
+  Dimensions,
+  Share,
 } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter, Stack, RelativePathString } from "expo-router";
@@ -18,14 +20,25 @@ import {
   Share2,
   Heart,
   MapPin,
+  ShieldCheck,
+  Users,
+  Package,
+  ChevronLeft,
 } from "lucide-react-native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { LinearGradient } from "expo-linear-gradient";
 
 import Colors from "@/constants/colors";
 import { stores, Store, Product } from "@/mocks/stores";
 import { useUser, type FavoriteProductSnapshot } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
 import { getFirestoreStore, getFirestoreStoreBySlug, getChatId, getOrCreateChat } from "@/services/firestore";
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const COVER_HEIGHT = 180;
+const AVATAR_SIZE = 90;
+
+type TabKey = "all" | "new";
 
 function ProductCard({
   product,
@@ -75,7 +88,7 @@ function ProductCard({
         >
           <Animated.View style={{ transform: [{ scale: heartScale }] }}>
             <Heart
-              size={18}
+              size={16}
               color={isFavorite ? Colors.white : Colors.textLight}
               fill={isFavorite ? Colors.white : "transparent"}
             />
@@ -92,6 +105,7 @@ export default function StoreDetailScreen() {
   const queryClient = useQueryClient();
   const { profile, isLoggedIn, uid, toggleFavorite } = useUser();
   const { showAlert } = useAlert();
+  const [activeTab, setActiveTab] = useState<TabKey>("all");
 
   const isMockOrOwn = id === "my-store" || !!stores.find((s) => s.id === id);
   const isSlug = !!id && id !== "my-store" && !stores.find((s) => s.id === id) && !id.match(/^[a-zA-Z0-9]{20,}$/);
@@ -245,6 +259,18 @@ export default function StoreDetailScreen() {
     });
   }, [store, isLoggedIn, showAlert, router, resolvedStoreId, storeOwnerId, toggleFavorite]);
 
+  const filteredProducts = useMemo(() => {
+    if (!store) return [];
+    if (activeTab === "all") return store.products;
+    if (activeTab === "new") return store.products.slice(-6);
+    return store.products;
+  }, [store, activeTab]);
+
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: "all", label: "Tüm Ürünler" },
+    { key: "new", label: "Yeni Gelenler" },
+  ];
+
   if (isLoading) {
     return (
       <View style={styles.errorContainer}>
@@ -265,43 +291,104 @@ export default function StoreDetailScreen() {
     <>
       <Stack.Screen
         options={{
-          headerShown: true,
-          title: store.name,
-          headerStyle: { backgroundColor: Colors.primary },
-          headerTintColor: Colors.headerText,
-          headerTitleStyle: { fontWeight: "700" as const, fontSize: 14 },
-          headerShadowVisible: false,
+          headerShown: false,
         }}
       />
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.storeHeader}>
-          <View style={styles.headerContent}>
-            <View style={styles.avatarWrapper}>
-              <Image source={{ uri: store.avatar }} style={styles.storeAvatar} />
-              {store.isOnline && <View style={styles.onlineDot} />}
-            </View>
-            <View style={styles.storeInfo}>
+        <View style={styles.coverContainer}>
+          <LinearGradient
+            colors={[Colors.primary, "#0a7a6e", Colors.accent]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.coverGradient}
+          />
+          <View style={styles.coverPattern}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.patternCircle,
+                  {
+                    left: (i % 3) * (SCREEN_WIDTH / 3) + 20,
+                    top: Math.floor(i / 3) * 80 + 20,
+                    opacity: 0.06 + (i * 0.02),
+                    width: 60 + (i * 10),
+                    height: 60 + (i * 10),
+                    borderRadius: 30 + (i * 5),
+                  },
+                ]}
+              />
+            ))}
+          </View>
+
+          <View style={styles.coverTopBar}>
+            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+              <ChevronLeft size={22} color={Colors.white} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.coverShareButton}
+              onPress={async () => {
+                await Share.share({ message: `${store.name} mağazasını keşfet!` });
+              }}
+            >
+              <Share2 size={18} color={Colors.white} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.profileSection}>
+          <View style={styles.avatarContainer}>
+            <Image source={{ uri: store.avatar }} style={styles.storeAvatar} />
+            {store.isOnline && <View style={styles.onlineDot} />}
+          </View>
+
+          <View style={styles.profileInfo}>
+            <View style={styles.nameRow}>
               <Text style={styles.storeName}>{store.name}</Text>
-              <View style={styles.ratingRow}>
-                <Star size={14} color={Colors.accent} fill={Colors.accent} />
-                <Text style={styles.ratingText}>{store.rating}</Text>
-                <Text style={styles.reviewCount}>({store.reviewCount} değerlendirme)</Text>
+              <ShieldCheck size={18} color={Colors.accent} fill={Colors.accent} />
+            </View>
+
+            {store.city ? (
+              <View style={styles.locationRow}>
+                <MapPin size={13} color={Colors.textSecondary} />
+                <Text style={styles.locationText}>{store.city}</Text>
               </View>
-              <View style={styles.statusRow}>
-                <View style={[styles.statusDot, { backgroundColor: store.isOnline ? Colors.online : Colors.textLight }]} />
-                <Text style={styles.statusText}>
-                  {store.isOnline ? "Çevrimiçi" : "Çevrimdışı"}
-                </Text>
+            ) : null}
+
+            {store.category ? (
+              <View style={styles.categoryBadge}>
+                <Text style={styles.categoryText}>{store.category}</Text>
               </View>
-              {store.city ? (
-                <View style={styles.cityRow}>
-                  <MapPin size={13} color={Colors.textSecondary} />
-                  <Text style={styles.cityText}>{store.city}</Text>
-                </View>
-              ) : null}
+            ) : null}
+
+            <Text style={styles.storeDescription} numberOfLines={3}>{store.description}</Text>
+          </View>
+
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <View style={[styles.statIconBg, { backgroundColor: "rgba(37, 211, 102, 0.1)" }]}>
+                <Star size={16} color={Colors.accent} fill={Colors.accent} />
+              </View>
+              <Text style={styles.statValue}>{store.rating}</Text>
+              <Text style={styles.statLabel}>Puan</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <View style={[styles.statIconBg, { backgroundColor: "rgba(7, 94, 84, 0.1)" }]}>
+                <Users size={16} color={Colors.primary} />
+              </View>
+              <Text style={styles.statValue}>{store.reviewCount}</Text>
+              <Text style={styles.statLabel}>Değerlendirme</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <View style={[styles.statIconBg, { backgroundColor: "rgba(7, 94, 84, 0.08)" }]}>
+                <Package size={16} color={Colors.primary} />
+              </View>
+              <Text style={styles.statValue}>{store.products.length}</Text>
+              <Text style={styles.statLabel}>Ürün</Text>
             </View>
           </View>
-          <Text style={styles.storeDescription}>{store.description}</Text>
 
           <View style={styles.actionButtons}>
             <TouchableOpacity
@@ -321,31 +408,61 @@ export default function StoreDetailScreen() {
                 startStoreChatMutation.mutate();
               }}
               disabled={startStoreChatMutation.isPending}
+              activeOpacity={0.8}
               testID="message-store"
             >
               <MessageCircle size={18} color={Colors.white} />
               <Text style={styles.messageStoreText}>Mesaj Gönder</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.shareButton}>
+            <TouchableOpacity
+              style={styles.shareActionButton}
+              activeOpacity={0.8}
+              onPress={async () => {
+                await Share.share({ message: `${store.name} mağazasını keşfet!` });
+              }}
+            >
               <Share2 size={18} color={Colors.primary} />
             </TouchableOpacity>
           </View>
         </View>
 
-        <View style={styles.productsSection}>
-          <Text style={styles.sectionTitle}>Ürünler ({store.products.length})</Text>
-          <View style={styles.productsGrid}>
-            {store.products.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                isFavorite={profile.favorites.includes(product.id)}
-                onPress={() => handleProductPress(product.id)}
-                onToggleFavorite={() => handleToggleProductFavorite(product)}
-              />
-            ))}
-          </View>
+        <View style={styles.tabsContainer}>
+          {tabs.map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[styles.tab, activeTab === tab.key && styles.tabActive]}
+              onPress={() => setActiveTab(tab.key)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
+
+        <View style={styles.productsSection}>
+          {filteredProducts.length === 0 ? (
+            <View style={styles.emptyProducts}>
+              <Package size={40} color={Colors.textLight} />
+              <Text style={styles.emptyProductsText}>Henüz ürün yok</Text>
+            </View>
+          ) : (
+            <View style={styles.productsGrid}>
+              {filteredProducts.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  isFavorite={profile.favorites.includes(product.id)}
+                  onPress={() => handleProductPress(product.id)}
+                  onToggleFavorite={() => handleToggleProductFavorite(product)}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+
+        <View style={{ height: 40 }} />
       </ScrollView>
     </>
   );
@@ -366,94 +483,160 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.textSecondary,
   },
-  storeHeader: {
-    backgroundColor: Colors.white,
-    padding: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  headerContent: {
-    flexDirection: "row",
-    gap: 14,
-  },
-  avatarWrapper: {
+  coverContainer: {
+    height: COVER_HEIGHT,
     position: "relative",
+    overflow: "hidden",
+  },
+  coverGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  coverPattern: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  patternCircle: {
+    position: "absolute",
+    backgroundColor: Colors.white,
+  },
+  coverTopBar: {
+    position: "absolute",
+    top: 50,
+    left: 16,
+    right: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  backButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  coverShareButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileSection: {
+    backgroundColor: Colors.white,
+    marginTop: -(AVATAR_SIZE / 2),
+    marginHorizontal: 0,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: AVATAR_SIZE / 2 + 12,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  avatarContainer: {
+    position: "absolute",
+    top: -(AVATAR_SIZE / 2),
+    alignSelf: "center",
+    left: SCREEN_WIDTH / 2 - AVATAR_SIZE / 2,
+    zIndex: 10,
   },
   storeAvatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    borderWidth: 4,
+    borderColor: Colors.white,
     backgroundColor: Colors.border,
   },
   onlineDot: {
     position: "absolute",
-    bottom: 2,
-    right: 2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    bottom: 4,
+    right: 4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: Colors.online,
-    borderWidth: 2.5,
+    borderWidth: 3,
     borderColor: Colors.white,
   },
-  storeInfo: {
-    flex: 1,
-    justifyContent: "center",
-    gap: 3,
+  profileInfo: {
+    alignItems: "center",
+    gap: 6,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   storeName: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "700" as const,
     color: Colors.text,
   },
-  ratingRow: {
+  locationRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
-  ratingText: {
-    fontSize: 14,
+  locationText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  categoryBadge: {
+    backgroundColor: "rgba(7, 94, 84, 0.08)",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  categoryText: {
+    fontSize: 12,
     fontWeight: "600" as const,
-    color: Colors.text,
-  },
-  reviewCount: {
-    fontSize: 13,
-    color: Colors.textLight,
-  },
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  cityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 3,
-  },
-  cityText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
+    color: Colors.primary,
   },
   storeDescription: {
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.textSecondary,
-    lineHeight: 20,
-    marginTop: 14,
+    lineHeight: 19,
+    textAlign: "center",
+    marginTop: 4,
+    paddingHorizontal: 10,
+  },
+  statsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 18,
+    backgroundColor: Colors.background,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+  },
+  statIconBg: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 2,
+  },
+  statValue: {
+    fontSize: 17,
+    fontWeight: "700" as const,
+    color: Colors.text,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: Colors.border,
   },
   actionButtons: {
     flexDirection: "row",
@@ -467,31 +650,68 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 12,
+    borderRadius: 14,
+    paddingVertical: 13,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   messageStoreText: {
     color: Colors.white,
     fontSize: 15,
     fontWeight: "600" as const,
   },
-  shareButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+  shareActionButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: Colors.primary,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
     alignItems: "center",
     justifyContent: "center",
   },
+  tabsContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 4,
+    gap: 8,
+  },
+  tab: {
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 20,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  tabActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: "600" as const,
+    color: Colors.textSecondary,
+  },
+  tabTextActive: {
+    color: Colors.white,
+  },
   productsSection: {
     padding: 16,
+    paddingTop: 12,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700" as const,
-    color: Colors.text,
-    marginBottom: 14,
+  emptyProducts: {
+    alignItems: "center",
+    paddingVertical: 40,
+    gap: 10,
+  },
+  emptyProductsText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
   },
   productsGrid: {
     flexDirection: "row",
@@ -501,32 +721,33 @@ const styles = StyleSheet.create({
   productCard: {
     width: "48%",
     backgroundColor: Colors.white,
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: "hidden",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   productImage: {
     width: "100%",
-    height: 150,
+    height: 160,
     backgroundColor: Colors.border,
   },
   productInfo: {
     padding: 10,
+    gap: 4,
   },
   productName: {
     fontSize: 13,
     fontWeight: "600" as const,
     color: Colors.text,
+    lineHeight: 17,
   },
   productPrice: {
     fontSize: 15,
     fontWeight: "700" as const,
     color: Colors.primary,
-    marginTop: 4,
   },
   heartButton: {
     position: "absolute",
@@ -535,15 +756,20 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.9)",
+    backgroundColor: "rgba(255,255,255,0.92)",
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   heartButtonActive: {
     backgroundColor: Colors.danger,
     shadowColor: Colors.danger,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
   },
