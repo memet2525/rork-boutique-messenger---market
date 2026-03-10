@@ -494,8 +494,14 @@ export default function ChatDetailScreen() {
         if (chatInitDone.current || !storeId) {
           hasInjectedProduct.current = true;
 
-          const decodedProductImage = productImage ? decodeURIComponent(productImage) : undefined;
-          console.log("Sending product message with image:", id, decodedProductImage);
+          let decodedProductImage: string | undefined;
+          try {
+            decodedProductImage = productImage ? decodeURIComponent(productImage) : undefined;
+          } catch (e) {
+            console.log("Product image decode error, using raw:", e);
+            decodedProductImage = productImage || undefined;
+          }
+          console.log("Sending product message with image:", id, "decoded:", decodedProductImage, "raw param:", productImage);
           sendMessageMutate({
             text: productMessage,
             productImage: decodedProductImage || undefined,

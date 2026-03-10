@@ -306,6 +306,9 @@ export default function ProductDetailScreen() {
       console.log("Product chat created successfully:", chatId);
       void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
       const productInfo = `🛍️ ${productData?.name}\n💰 ${productData?.price}\n\nBu ürün hakkında bilgi almak istiyorum.`;
+      const imgs = (productData as any)?.images as string[] | undefined;
+      const bestImage = (imgs && imgs.length > 0 ? imgs[0] : productData?.image) ?? "";
+      console.log("Product chat navigate - bestImage:", bestImage, "productData.image:", productData?.image, "images:", imgs);
       router.push({
         pathname: "/chat/[id]" as RelativePathString,
         params: {
@@ -316,7 +319,7 @@ export default function ProductDetailScreen() {
           storeOwnerId: resolvedStoreOwnerId,
           isOnline: storeData?.isOnline ? "true" : "false",
           productMessage: productInfo,
-          productImage: encodeURIComponent(productData?.image ?? ""),
+          productImage: bestImage ? encodeURIComponent(bestImage) : "",
           productName: productData?.name ?? "",
           productPrice: productData?.price ?? "",
         },
