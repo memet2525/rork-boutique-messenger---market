@@ -1,8 +1,37 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const fs = require("fs");
+const path = require("path");
 
 admin.initializeApp();
 const db = admin.firestore();
+
+const BOT_UA_REGEX = /facebookexternalhit|Twitterbot|WhatsApp|LinkedInBot|Slackbot|TelegramBot|Googlebot|bingbot|Discordbot|Baiduspider|YandexBot|Pinterestbot|redditbot|Applebot|Embedly|Quora Link Preview|Showyoubot|outbrain|vkShare|W3C_Validator|kakaotalk-scrap|developers\.google\.com\/\+\/web\/snippet/i;
+
+let cachedIndexHtml = null;
+function getIndexHtml() {
+  if (cachedIndexHtml) return cachedIndexHtml;
+  try {
+    const indexPath = path.join(__dirname, "..", "dist", "index.html");
+    cachedIndexHtml = fs.readFileSync(indexPath, "utf8");
+  } catch (e) { // eslint-disable-line no-unused-vars
+    cachedIndexHtml = null;
+  }
+  return cachedIndexHtml;
+}
+
+function isBot(userAgent) {
+  return BOT_UA_REGEX.test(userAgent || "");
+}
+
+function serveIndexOrRedirect(req, res) {
+  const html = getIndexHtml();
+  if (html) {
+    res.status(200).send(html);
+  } else {
+    res.redirect(`https://${DOMAIN}/`);
+  }
+}
 
 const DOMAIN = "butikbiz.com";
 const SITE_NAME = "ButikBiz";
@@ -86,8 +115,14 @@ function buildOgHtml(params) {
 
 exports.ogStorePreview = functions.https.onRequest(async (req, res) => {
   try {
-    const path = req.path;
-    const parts = path.split("/").filter(Boolean);
+    const ua = req.headers["user-agent"] || "";
+    if (!isBot(ua)) {
+      serveIndexOrRedirect(req, res);
+      return;
+    }
+
+    const reqPath = req.path;
+    const parts = reqPath.split("/").filter(Boolean);
 
     if (parts.length < 2) {
       res.redirect(`https://${DOMAIN}/`);
@@ -98,7 +133,7 @@ exports.ogStorePreview = functions.https.onRequest(async (req, res) => {
     const productSlug = parts.length >= 3 ? parts[2] : null;
 
     if (storeSlug === "form" || storeSlug === "_layout") {
-      res.redirect(`https://${DOMAIN}${path}`);
+      res.redirect(`https://${DOMAIN}${reqPath}`);
       return;
     }
 
@@ -167,8 +202,14 @@ exports.ogStorePreview = functions.https.onRequest(async (req, res) => {
 
 exports.ogProductPreview = functions.https.onRequest(async (req, res) => {
   try {
-    const path = req.path;
-    const parts = path.split("/").filter(Boolean);
+    const ua = req.headers["user-agent"] || "";
+    if (!isBot(ua)) {
+      serveIndexOrRedirect(req, res);
+      return;
+    }
+
+    const reqPath = req.path;
+    const parts = reqPath.split("/").filter(Boolean);
 
     if (parts.length < 2) {
       res.redirect(`https://${DOMAIN}/`);
