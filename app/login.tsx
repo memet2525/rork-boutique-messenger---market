@@ -43,6 +43,8 @@ export default function LoginScreen() {
   const buttonScale = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+  const signupPulse = useRef(new Animated.Value(1)).current;
+  const signupGlow = useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
     Animated.parallel([
@@ -50,6 +52,34 @@ export default function LoginScreen() {
       Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
     ]).start();
   }, [fadeAnim, slideAnim]);
+
+  React.useEffect(() => {
+    if (mode === "login") {
+      const pulseLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(signupPulse, { toValue: 1.08, duration: 800, useNativeDriver: true }),
+          Animated.timing(signupPulse, { toValue: 1, duration: 800, useNativeDriver: true }),
+        ])
+      );
+      const glowLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(signupGlow, { toValue: 1, duration: 800, useNativeDriver: false }),
+          Animated.timing(signupGlow, { toValue: 0, duration: 800, useNativeDriver: false }),
+        ])
+      );
+      pulseLoop.start();
+      glowLoop.start();
+      return () => {
+        pulseLoop.stop();
+        glowLoop.stop();
+      };
+    }
+  }, [mode, signupPulse, signupGlow]);
+
+  const signupBgColor = signupGlow.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["rgba(7,94,84,0)", "rgba(7,94,84,0.1)"],
+  });
 
   const canLogin = email.trim().length > 3 && password.trim().length >= 6;
   const canRegister =
@@ -415,9 +445,12 @@ export default function LoginScreen() {
             <View style={styles.switchContainer}>
               {mode === "login" ? (
                 <TouchableOpacity onPress={() => switchMode("register")} testID="switch-register">
-                  <Text style={styles.switchText}>
-                    Hesabiniz yok mu? <Text style={styles.switchLink}>Uye Ol</Text>
-                  </Text>
+                  <View style={styles.switchRow}>
+                    <Text style={styles.switchText}>Hesabiniz yok mu? </Text>
+                    <Animated.View style={[styles.signupBadge, { transform: [{ scale: signupPulse }], backgroundColor: signupBgColor }]}>
+                      <Text style={styles.signupBadgeText}>Uye Ol</Text>
+                    </Animated.View>
+                  </View>
                 </TouchableOpacity>
               ) : mode === "register" ? (
                 <TouchableOpacity onPress={() => switchMode("login")} testID="switch-login">
@@ -617,6 +650,24 @@ const styles = StyleSheet.create({
   switchLink: {
     color: Colors.primary,
     fontWeight: "700" as const,
+  },
+  switchRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  signupBadge: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+  },
+  signupBadgeText: {
+    color: Colors.primary,
+    fontWeight: "800" as const,
+    fontSize: 14,
+    letterSpacing: 0.5,
   },
   termsText: {
     fontSize: 11,
