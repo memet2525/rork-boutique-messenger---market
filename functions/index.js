@@ -46,12 +46,14 @@ function isBot(userAgent) {
 }
 
 async function serveIndexOrRedirect(req, res) {
+  const originalPath = req.originalUrl || req.url || '/';
   const html = await getIndexHtml();
   if (html) {
     res.set("Cache-Control", "public, max-age=600, s-maxage=600");
     res.status(200).send(html);
   } else {
-    res.redirect(`https://${DOMAIN}/`);
+    const encodedPath = encodeURIComponent(originalPath);
+    res.redirect(`https://${DOMAIN}/?_path=${encodedPath}`);
   }
 }
 
