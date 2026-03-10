@@ -17,7 +17,7 @@ jobs:
           projectId: butikbiz-66195
       - name: Deploy Functions
         run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_BUTIKBIZ_66195 }}' > $HOME/gcloud-key.json
+          export GOOGLE_APPLICATION_CREDENTIALS=$HOME/gcloud-key.json
           cd functions && npm install
           npx firebase-tools deploy --only functions --project butikbiz-66195
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BUTIKBIZ_66195 }}
