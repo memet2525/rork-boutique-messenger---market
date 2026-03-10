@@ -17,6 +17,8 @@ import {
   sendAdminChatMessage,
   getStoreAddresses,
   deleteStoreAddress,
+  followStore,
+  unfollowStore,
 } from "@/services/firestore";
 import { slugify } from "@/utils/links";
 
@@ -81,6 +83,7 @@ export interface UserProfile {
   addressSubmissions: AddressSubmission[];
   favorites: string[];
   favoriteSnapshots: FavoriteProductSnapshot[];
+  followingStores: string[];
   notificationsEnabled: boolean;
   chatNotifications: boolean;
   orderNotifications: boolean;
@@ -125,6 +128,7 @@ const DEFAULT_PROFILE: UserProfile = {
   addressSubmissions: [],
   favorites: [],
   favoriteSnapshots: [],
+  followingStores: [],
   notificationsEnabled: true,
   chatNotifications: true,
   orderNotifications: true,
@@ -229,6 +233,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
         merged.addressSubmissions = Array.isArray(merged.addressSubmissions) ? merged.addressSubmissions : [];
         merged.favorites = Array.isArray(merged.favorites) ? merged.favorites : [];
         merged.favoriteSnapshots = Array.isArray(merged.favoriteSnapshots) ? merged.favoriteSnapshots : [];
+        merged.followingStores = Array.isArray(merged.followingStores) ? merged.followingStores : [];
         merged.systemNotifications = Array.isArray(merged.systemNotifications) ? merged.systemNotifications : [];
         return merged;
       }
@@ -640,6 +645,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
           merged.addressSubmissions = Array.isArray(merged.addressSubmissions) ? merged.addressSubmissions : [];
           merged.favorites = Array.isArray(merged.favorites) ? merged.favorites : [];
           merged.favoriteSnapshots = Array.isArray(merged.favoriteSnapshots) ? merged.favoriteSnapshots : [];
+          merged.followingStores = Array.isArray(merged.followingStores) ? merged.followingStores : [];
           merged.systemNotifications = Array.isArray(merged.systemNotifications) ? merged.systemNotifications : [];
 
           const profilePatch: Partial<UserProfile> = {};
@@ -734,6 +740,39 @@ export const [UserProvider, useUser] = createContextHook(() => {
     [uid]
   );
 
+  const toggleFollowStore = useCallback(
+    async (storeId: string): Promise<boolean> => {
+      if (!uid) throw new Error("Oturum bulunamadı.");
+      const latestProfile = profileRef.current;
+      const currentFollowing = Array.isArray(latestProfile.followingStores) ? latestProfile.followingStores : [];
+      const isCurrentlyFollowing = currentFollowing.includes(storeId);
+
+      const updatedFollowing = isCurrentlyFollowing
+        ? currentFollowing.filter((id) => id !== storeId)
+        : [...currentFollowing, storeId];
+
+      setProfile((prev) => ({ ...prev, followingStores: updatedFollowing }));
+      profileRef.current = { ...profileRef.current, followingStores: updatedFollowing };
+
+      try {
+        if (isCurrentlyFollowing) {
+          await unfollowStore(uid, storeId);
+        } else {
+          await followStore(uid, storeId);
+        }
+        console.log("toggleFollowStore: success, now following:", !isCurrentlyFollowing);
+      } catch (err) {
+        setProfile((prev) => ({ ...prev, followingStores: currentFollowing }));
+        profileRef.current = { ...profileRef.current, followingStores: currentFollowing };
+        console.error("toggleFollowStore: failed, reverted", err);
+        throw err;
+      }
+
+      return !isCurrentlyFollowing;
+    },
+    [uid]
+  );
+
   const unreadNotificationCount = profile.systemNotifications.filter((n) => !n.read).length;
 
   return useMemo(() => ({
@@ -743,6 +782,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
     uid,
     updateProfile,
     toggleFavorite,
+    toggleFollowStore,
     addStoreProduct,
     deleteStoreProduct,
     updateStoreProduct,
@@ -763,7 +803,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
     unreadNotificationCount,
     isLoading: profileQuery.isLoading,
   }), [
-    profile, isLoggedIn, authLoading, uid, updateProfile, toggleFavorite,
+    profile, isLoggedIn, authLoading, uid, updateProfile, toggleFavorite, toggleFollowStore,
     addStoreProduct, deleteStoreProduct, updateStoreProduct, addAddressSubmission,
     deleteAddressSubmission, storeAddresses, refreshAddresses, register, login,
     logout, resetPassword, canChangeStoreName, changeStoreName, isSubscriptionActive,

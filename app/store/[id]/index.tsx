@@ -34,7 +34,7 @@ import Colors from "@/constants/colors";
 import { stores, Store, Product } from "@/mocks/stores";
 import { useUser, type FavoriteProductSnapshot } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
-import { getFirestoreStore, getFirestoreStoreBySlug, getChatId, getOrCreateChat } from "@/services/firestore";
+import { getFirestoreStore, getFirestoreStoreBySlug, getChatId, getOrCreateChat, getStoreFollowerCount } from "@/services/firestore";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const COVER_HEIGHT = 200;
@@ -114,10 +114,10 @@ export default function StoreDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { profile, isLoggedIn, uid, toggleFavorite } = useUser();
+  const { profile, isLoggedIn, uid, toggleFavorite, toggleFollowStore } = useUser();
   const { showAlert } = useAlert();
   const [activeTab, setActiveTab] = useState<TabKey>("all");
-  const [isFollowing, setIsFollowing] = useState<boolean>(false);
+  const [followerDelta, setFollowerDelta] = useState<number>(0);
 
   const isMockOrOwn = id === "my-store" || !!stores.find((s) => s.id === id);
   const isSlug = !!id && id !== "my-store" && !stores.find((s) => s.id === id) && !id.match(/^[a-zA-Z0-9]{20,}$/);
@@ -283,6 +283,23 @@ export default function StoreDetailScreen() {
     { key: "new", label: "Yeni Gelenler" },
   ];
 
+  const resolvedFollowStoreId = useMemo(() => {
+    if (firestoreData && firestoreData.ownerId) return firestoreData.ownerId as string;
+    if (id === "my-store" && uid) return uid;
+    return resolvedStoreId;
+  }, [firestoreData, id, uid, resolvedStoreId]);
+
+  const isFollowing = useMemo(() => {
+    const following = Array.isArray(profile.followingStores) ? profile.followingStores : [];
+    return following.includes(resolvedFollowStoreId);
+  }, [profile.followingStores, resolvedFollowStoreId]);
+
+  const followerCountQuery = useQuery({
+    queryKey: ["storeFollowerCount", resolvedFollowStoreId],
+    queryFn: () => getStoreFollowerCount(resolvedFollowStoreId),
+    enabled: !!resolvedFollowStoreId && resolvedFollowStoreId !== "my-store",
+  });
+
   const handleFollow = React.useCallback(() => {
     if (!isLoggedIn) {
       showAlert(
@@ -295,8 +312,13 @@ export default function StoreDetailScreen() {
       );
       return;
     }
-    setIsFollowing((prev) => !prev);
-  }, [isLoggedIn, showAlert, router]);
+    const willFollow = !isFollowing;
+    setFollowerDelta((prev) => prev + (willFollow ? 1 : -1));
+    toggleFollowStore(resolvedFollowStoreId).catch(() => {
+      setFollowerDelta((prev) => prev + (willFollow ? -1 : 1));
+      showAlert("Hata", "Takip işlemi sırasında bir hata oluştu.");
+    });
+  }, [isLoggedIn, isFollowing, showAlert, router, toggleFollowStore, resolvedFollowStoreId]);
 
   if (isLoading) {
     return (
@@ -314,7 +336,8 @@ export default function StoreDetailScreen() {
     );
   }
 
-  const followerCount = store.reviewCount > 0 ? store.reviewCount * 5 : 0;
+  const baseFollowerCount = followerCountQuery.data ?? (store.reviewCount > 0 ? store.reviewCount * 5 : 0);
+  const followerCount = Math.max(0, baseFollowerCount + followerDelta);
 
   return (
     <>

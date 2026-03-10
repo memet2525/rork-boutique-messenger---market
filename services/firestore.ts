@@ -10,6 +10,8 @@ import {
   query,
   where,
   arrayUnion,
+  arrayRemove,
+  increment,
   onSnapshot,
   type Unsubscribe,
 } from "firebase/firestore";
@@ -1369,6 +1371,64 @@ export async function verifyStorePaymentAdmin(storeId: string): Promise<void> {
   } catch (error) {
     console.log("Error verifying store payment:", error);
     throw error;
+  }
+}
+
+export async function followStore(userId: string, storeId: string): Promise<void> {
+  try {
+    const userRef = doc(db, "users", userId);
+    await updateDoc(userRef, {
+      followingStores: arrayUnion(storeId),
+    });
+
+    const storeRef = doc(db, "stores", storeId);
+    const storeSnap = await getDoc(storeRef);
+    if (storeSnap.exists()) {
+      await updateDoc(storeRef, {
+        followerCount: increment(1),
+      });
+    }
+
+    console.log("followStore: user", userId, "followed store", storeId);
+  } catch (error) {
+    console.log("Error following store:", error);
+    throw error;
+  }
+}
+
+export async function unfollowStore(userId: string, storeId: string): Promise<void> {
+  try {
+    const userRef = doc(db, "users", userId);
+    await updateDoc(userRef, {
+      followingStores: arrayRemove(storeId),
+    });
+
+    const storeRef = doc(db, "stores", storeId);
+    const storeSnap = await getDoc(storeRef);
+    if (storeSnap.exists()) {
+      await updateDoc(storeRef, {
+        followerCount: increment(-1),
+      });
+    }
+
+    console.log("unfollowStore: user", userId, "unfollowed store", storeId);
+  } catch (error) {
+    console.log("Error unfollowing store:", error);
+    throw error;
+  }
+}
+
+export async function getStoreFollowerCount(storeId: string): Promise<number> {
+  try {
+    const storeSnap = await getDoc(doc(db, "stores", storeId));
+    if (storeSnap.exists()) {
+      const data = storeSnap.data();
+      return typeof data.followerCount === "number" ? Math.max(0, data.followerCount) : 0;
+    }
+    return 0;
+  } catch (error) {
+    console.log("Error getting follower count:", error);
+    return 0;
   }
 }
 
