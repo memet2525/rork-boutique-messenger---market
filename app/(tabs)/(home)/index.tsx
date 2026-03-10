@@ -282,7 +282,7 @@ export default function MarketplaceScreen() {
             {!isLoggedIn && (
               <TouchableOpacity
                 style={styles.loginBtn}
-                onPress={() => router.push("/login" as never)}
+                onPress={() => router.push("/login?mode=register" as never)}
                 testID="header-login-btn"
                 activeOpacity={0.7}
               >

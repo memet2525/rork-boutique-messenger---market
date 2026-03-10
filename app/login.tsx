@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
   Modal,
 } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useRouter, useLocalSearchParams } from "expo-router";
 import { Mail, Lock, User, ArrowRight, Store, Eye, EyeOff, Check, FileText } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 
@@ -28,7 +28,10 @@ export default function LoginScreen() {
   const { login, register, resetPassword } = useUser();
   const { showAlert } = useAlert();
 
-  const [mode, setMode] = useState<AuthMode>("login");
+  const { mode: initialMode } = useLocalSearchParams<{ mode?: string }>();
+  const [mode, setMode] = useState<AuthMode>(
+    initialMode === "register" ? "register" : initialMode === "forgot" ? "forgot" : "login"
+  );
   const [firstName, setFirstName] = useState<string>("");
   const [lastName, setLastName] = useState<string>("");
   const [email, setEmail] = useState<string>("");
