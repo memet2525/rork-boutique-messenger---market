@@ -31,6 +31,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
+import { getStoreLink } from "@/utils/links";
 import { stores, Store, Product } from "@/mocks/stores";
 import { useUser, type FavoriteProductSnapshot } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
@@ -362,7 +363,8 @@ export default function StoreDetailScreen() {
               <TouchableOpacity
                 style={styles.topBarBtn}
                 onPress={async () => {
-                  await Share.share({ message: `${store.name} mağazasını keşfet!` });
+                  const storeLink = getStoreLink(store.name);
+                  await Share.share({ message: `${store.name} mağazasını keşfet! ${storeLink}` });
                 }}
                 testID="store-share-btn"
               >
