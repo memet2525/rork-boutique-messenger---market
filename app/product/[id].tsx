@@ -257,16 +257,44 @@ export default function ProductDetailScreen() {
     });
   }, [productData, isLoggedIn, showAlert, router, heartScale, favoritePulse, toggleFavoriteProduct, storeData, storeId, storeOwnerIdParam, firestoreStoreQuery.data]);
 
+  const bestProductImage = useMemo(() => {
+    if (!productData) return "";
+    const imgs = (productData as any).images as string[] | undefined;
+    if (imgs && Array.isArray(imgs)) {
+      for (const img of imgs) {
+        if (img && typeof img === "string" && img.trim().length > 0 && img.startsWith("http")) {
+          return img.trim();
+        }
+      }
+    }
+    if (productData.image && typeof productData.image === "string" && productData.image.trim().length > 0 && productData.image.startsWith("http")) {
+      return productData.image.trim();
+    }
+    if (storeData?.avatar && typeof storeData.avatar === "string" && storeData.avatar.trim().length > 0 && storeData.avatar.startsWith("http")) {
+      return storeData.avatar.trim();
+    }
+    return "";
+  }, [productData, storeData]);
+
   const handleShare = useCallback(async () => {
     if (Platform.OS !== "web") {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     try {
       const productUrl = getProductLink(productData?.name ?? "", storeData?.name);
-      await Share.share({
-        message: `${productData?.name} - ${productData?.price}\n${storeData?.name} mağazasında bu ürüne göz at!\n${productUrl}`,
-        title: productData?.name ?? "Ürün",
-      });
+      const shareMessage = `${productData?.name} - ${productData?.price}\n${storeData?.name} mağazasında bu ürüne göz at!\n${productUrl}`;
+      if (Platform.OS === "ios") {
+        await Share.share({
+          message: shareMessage,
+          url: productUrl,
+          title: productData?.name ?? "Ürün",
+        });
+      } else {
+        await Share.share({
+          message: shareMessage,
+          title: productData?.name ?? "Ürün",
+        });
+      }
     } catch (error) {
       console.log("Share error:", error);
     }
@@ -306,9 +334,7 @@ export default function ProductDetailScreen() {
       console.log("Product chat created successfully:", chatId);
       void queryClient.invalidateQueries({ queryKey: ["userChats", uid] });
       const productInfo = `🛍️ ${productData?.name}\n💰 ${productData?.price}\n\nBu ürün hakkında bilgi almak istiyorum.`;
-      const imgs = (productData as any)?.images as string[] | undefined;
-      const bestImage = (imgs && imgs.length > 0 ? imgs[0] : productData?.image) ?? "";
-      console.log("Product chat navigate - bestImage:", bestImage, "productData.image:", productData?.image, "images:", imgs);
+      console.log("Product chat navigate - bestProductImage:", bestProductImage, "productData.image:", productData?.image);
       router.push({
         pathname: "/chat/[id]" as RelativePathString,
         params: {
@@ -319,7 +345,7 @@ export default function ProductDetailScreen() {
           storeOwnerId: resolvedStoreOwnerId,
           isOnline: storeData?.isOnline ? "true" : "false",
           productMessage: productInfo,
-          productImage: bestImage ? encodeURIComponent(bestImage) : "",
+          productImage: bestProductImage ? encodeURIComponent(bestProductImage) : "",
           productName: productData?.name ?? "",
           productPrice: productData?.price ?? "",
         },

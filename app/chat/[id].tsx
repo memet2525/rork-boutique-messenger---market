@@ -111,6 +111,7 @@ function ProductMessageBubble({ message }: { message: DisplayMessage }) {
   }, [fadeAnim]);
 
   const isSent = message.isSent;
+  const hasValidImage = !!(message.productImage && message.productImage.trim().length > 0 && message.productImage.startsWith("http"));
 
   return (
     <Animated.View
@@ -122,9 +123,13 @@ function ProductMessageBubble({ message }: { message: DisplayMessage }) {
     >
       <View style={[styles.bubbleContainer, isSent ? styles.sentContainer : styles.receivedContainer]}>
         <View style={[styles.bubble, isSent ? styles.sentBubble : styles.receivedBubble, { padding: 0, overflow: "hidden" as const }]}>
-          {message.productImage ? (
+          {hasValidImage ? (
             <Image source={{ uri: message.productImage }} style={styles.productCardImage} contentFit="cover" />
-          ) : null}
+          ) : (
+            <View style={styles.productCardImagePlaceholder}>
+              <Text style={styles.productCardImagePlaceholderText}>🛍️</Text>
+            </View>
+          )}
           <View style={styles.productCardInfo}>
             {message.productName ? (
               <Text style={[styles.messageText, isSent ? styles.sentText : styles.receivedText, { fontWeight: "700" as const, fontSize: 14 }]}>{message.productName}</Text>
@@ -982,6 +987,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.danger,
     fontWeight: "500" as const,
+  },
+  productCardImagePlaceholder: {
+    width: "100%",
+    height: 100,
+    backgroundColor: "#E8F5E9",
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  productCardImagePlaceholderText: {
+    fontSize: 36,
   },
   productCardPrice: {
     fontSize: 16,

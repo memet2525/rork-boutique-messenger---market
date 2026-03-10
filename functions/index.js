@@ -84,6 +84,30 @@ function escapeHtml(text) {
     .replace(/'/g, "&#039;");
 }
 
+function getValidImageUrl(product, store) {
+  if (product) {
+    if (Array.isArray(product.images)) {
+      for (const img of product.images) {
+        if (img && typeof img === "string" && img.trim().length > 0 && img.startsWith("http")) {
+          return img.trim();
+        }
+      }
+    }
+    if (product.image && typeof product.image === "string" && product.image.trim().length > 0 && product.image.startsWith("http")) {
+      return product.image.trim();
+    }
+  }
+  if (store) {
+    if (store.avatar && typeof store.avatar === "string" && store.avatar.trim().length > 0 && store.avatar.startsWith("http")) {
+      return store.avatar.trim();
+    }
+    if (store.coverImage && typeof store.coverImage === "string" && store.coverImage.trim().length > 0 && store.coverImage.startsWith("http")) {
+      return store.coverImage.trim();
+    }
+  }
+  return DEFAULT_IMAGE;
+}
+
 function buildOgHtml(params) {
   const { title, description, image, url, type = "website" } = params;
   const safeTitle = escapeHtml(title);
@@ -103,6 +127,8 @@ function buildOgHtml(params) {
   <meta property="og:title" content="${safeTitle}" />
   <meta property="og:description" content="${safeDesc}" />
   <meta property="og:image" content="${safeImage}" />
+  <meta property="og:image:width" content="600" />
+  <meta property="og:image:height" content="600" />
   <meta property="og:url" content="${safeUrl}" />
   <meta property="og:type" content="${type}" />
   <meta property="og:site_name" content="${SITE_NAME}" />
@@ -192,11 +218,7 @@ exports.ogStorePreview = functions.https.onRequest(async (req, res) => {
       });
 
       if (product) {
-        const productImage =
-          (product.images && product.images.length > 0 ? product.images[0] : null) ||
-          product.image ||
-          storeData.avatar ||
-          DEFAULT_IMAGE;
+        const productImage = getValidImageUrl(product, storeData);
 
         const html = buildOgHtml({
           title: `${product.name} - ${storeData.name}`,
@@ -213,7 +235,7 @@ exports.ogStorePreview = functions.https.onRequest(async (req, res) => {
     const html = buildOgHtml({
       title: `${storeData.name} - ${SITE_NAME}`,
       description: storeData.description || DEFAULT_DESCRIPTION,
-      image: storeData.avatar || storeData.coverImage || DEFAULT_IMAGE,
+      image: getValidImageUrl(null, storeData),
       url: `https://${DOMAIN}/store/${storeSlug}`,
       type: "profile",
     });
@@ -262,11 +284,7 @@ exports.ogProductPreview = functions.https.onRequest(async (req, res) => {
       return;
     }
 
-    const productImage =
-      (foundProduct.images && foundProduct.images.length > 0 ? foundProduct.images[0] : null) ||
-      foundProduct.image ||
-      foundStore.avatar ||
-      DEFAULT_IMAGE;
+    const productImage = getValidImageUrl(foundProduct, foundStore);
 
     const storeSlug = foundStore.slug || slugify(foundStore.name || "");
     const productSlug = slugify(foundProduct.name || "");
