@@ -543,9 +543,7 @@ const styles = StyleSheet.create({
   },
   profileSection: {
     backgroundColor: Colors.white,
-    marginTop: -24,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    marginTop: 0,
     paddingTop: 20,
     paddingHorizontal: 20,
     paddingBottom: 20,
