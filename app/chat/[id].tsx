@@ -499,26 +499,26 @@ export default function ChatDetailScreen() {
         if (chatInitDone.current || !storeId) {
           hasInjectedProduct.current = true;
 
-          let decodedProductImage: string | undefined;
+          let resolvedProductImage: string | undefined;
           if (productImage && productImage.trim().length > 0) {
-            try {
-              const decoded = decodeURIComponent(productImage);
-              if (decoded.startsWith("http://") || decoded.startsWith("https://")) {
-                decodedProductImage = decoded;
-              } else if (productImage.startsWith("http://") || productImage.startsWith("https://")) {
-                decodedProductImage = productImage;
-              }
-            } catch (e) {
-              console.log("Product image decode error, using raw:", e);
-              if (productImage.startsWith("http://") || productImage.startsWith("https://")) {
-                decodedProductImage = productImage;
+            const raw = productImage.trim();
+            if (raw.startsWith("http://") || raw.startsWith("https://")) {
+              resolvedProductImage = raw;
+            } else {
+              try {
+                const decoded = decodeURIComponent(raw);
+                if (decoded.startsWith("http://") || decoded.startsWith("https://")) {
+                  resolvedProductImage = decoded;
+                }
+              } catch (e) {
+                console.log("Product image decode error:", e);
               }
             }
           }
-          console.log("Sending product message with image:", id, "decoded:", decodedProductImage?.substring(0, 100), "raw param:", productImage?.substring(0, 100));
+          console.log("Sending product message with image:", id, "resolved:", resolvedProductImage?.substring(0, 120), "raw param:", productImage?.substring(0, 120));
           sendMessageMutate({
             text: productMessage,
-            productImage: decodedProductImage || undefined,
+            productImage: resolvedProductImage || undefined,
             productName: productName || undefined,
             productPrice: productPrice || undefined,
           });

@@ -352,7 +352,7 @@ export default function ProductDetailScreen() {
           storeOwnerId: resolvedStoreOwnerId,
           isOnline: storeData?.isOnline ? "true" : "false",
           productMessage: productInfo,
-          productImage: bestProductImage ? encodeURIComponent(bestProductImage) : "",
+          productImage: bestProductImage || "",
           productName: productData?.name ?? "",
           productPrice: productData?.price ?? "",
         },
