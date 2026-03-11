@@ -514,17 +514,16 @@ export default function ChatDetailScreen() {
           let resolvedProductImage: string | undefined;
           if (productImage && productImage.trim().length > 0) {
             let raw = productImage.trim();
-            try {
-              const decoded = decodeURIComponent(raw);
-              if (decoded.startsWith("http://") || decoded.startsWith("https://")) {
-                resolvedProductImage = decoded;
-              } else if (raw.startsWith("http://") || raw.startsWith("https://")) {
-                resolvedProductImage = raw;
-              }
-            } catch (e) {
-              console.log("Product image decode error:", e);
-              if (raw.startsWith("http://") || raw.startsWith("https://")) {
-                resolvedProductImage = raw;
+            if (raw.startsWith("http://") || raw.startsWith("https://")) {
+              resolvedProductImage = raw;
+            } else {
+              try {
+                const decoded = decodeURIComponent(raw);
+                if (decoded.startsWith("http://") || decoded.startsWith("https://")) {
+                  resolvedProductImage = decoded;
+                }
+              } catch (e) {
+                console.log("Product image decode error:", e);
               }
             }
           }
