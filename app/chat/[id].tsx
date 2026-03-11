@@ -501,18 +501,19 @@ export default function ChatDetailScreen() {
 
           let resolvedProductImage: string | undefined;
           if (productImage && productImage.trim().length > 0) {
-            const raw = productImage.trim();
-            if (raw.startsWith("http://") || raw.startsWith("https://")) {
-              resolvedProductImage = raw;
-            } else {
-              try {
-                const decoded = decodeURIComponent(raw);
-                if (decoded.startsWith("http://") || decoded.startsWith("https://")) {
-                  resolvedProductImage = decoded;
-                }
-              } catch (e) {
-                console.log("Product image decode error:", e);
+            let raw = productImage.trim();
+            try {
+              const decoded = decodeURIComponent(raw);
+              if (decoded.startsWith("http://") || decoded.startsWith("https://")) {
+                resolvedProductImage = decoded;
+              } else if (raw.startsWith("http://") || raw.startsWith("https://")) {
+                resolvedProductImage = raw;
               }
+            } catch (e) {
+              if (raw.startsWith("http://") || raw.startsWith("https://")) {
+                resolvedProductImage = raw;
+              }
+              console.log("Product image decode error:", e);
             }
           }
           console.log("Sending product message with image:", id, "resolved:", resolvedProductImage?.substring(0, 120), "raw param:", productImage?.substring(0, 120));
