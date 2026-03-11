@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,9 +9,10 @@ import {
   Platform,
   KeyboardAvoidingView,
   ActivityIndicator,
+  Animated,
 } from "react-native";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Send, Package, MapPin } from "lucide-react-native";
+import { Stack, useLocalSearchParams, useRouter, RelativePathString } from "expo-router";
+import { Send, Package, MapPin, ChevronRight } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useQuery, useMutation } from "@tanstack/react-query";
 
@@ -62,6 +63,33 @@ export default function StoreAddressFormScreen() {
     }
     return { id: id ?? "unknown", name: "", ownerId: id ?? "" };
   }, [id, firestoreData]);
+
+  const storeChipScale = useRef(new Animated.Value(1)).current;
+  const storeChipGlow = useRef(new Animated.Value(0.6)).current;
+
+  useEffect(() => {
+    if (resolvedStore.id && resolvedStore.id !== "unknown") {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(storeChipGlow, { toValue: 1, duration: 1200, useNativeDriver: true }),
+          Animated.timing(storeChipGlow, { toValue: 0.6, duration: 1200, useNativeDriver: true }),
+        ])
+      ).start();
+    }
+  }, [resolvedStore.id, storeChipGlow]);
+
+  const handleStorePress = useCallback(() => {
+    if (!resolvedStore.id || resolvedStore.id === "unknown") return;
+    if (Platform.OS !== "web") {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    Animated.sequence([
+      Animated.timing(storeChipScale, { toValue: 0.95, duration: 80, useNativeDriver: true }),
+      Animated.timing(storeChipScale, { toValue: 1, duration: 80, useNativeDriver: true }),
+    ]).start(() => {
+      router.push(`/store/${resolvedStore.id}` as RelativePathString);
+    });
+  }, [resolvedStore.id, storeChipScale, router]);
 
   const [customerName, setCustomerName] = useState<string>("");
   const [customerPhone, setCustomerPhone] = useState<string>("");
@@ -121,7 +149,7 @@ export default function StoreAddressFormScreen() {
     },
     onSuccess: () => {
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
       showAlert(
         "Adres Gönderildi",
@@ -182,14 +210,23 @@ export default function StoreAddressFormScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          <View style={styles.headerChip}>
-            <MapPin size={16} color={Colors.primary} />
-            <Text style={styles.headerChipText}>
-              {resolvedStore.name
-                ? `${resolvedStore.name} için teslimat bilgileri`
-                : "Teslimat Bilgileri"}
-            </Text>
-          </View>
+          <Animated.View style={{ transform: [{ scale: storeChipScale }], opacity: resolvedStore.id && resolvedStore.id !== "unknown" ? storeChipGlow : 1 }}>
+            <TouchableOpacity
+              style={[styles.headerChip, resolvedStore.id && resolvedStore.id !== "unknown" ? styles.headerChipClickable : undefined]}
+              activeOpacity={resolvedStore.id && resolvedStore.id !== "unknown" ? 0.6 : 1}
+              onPress={handleStorePress}
+              disabled={!resolvedStore.id || resolvedStore.id === "unknown"}
+              testID="store-chip"
+            >
+              <MapPin size={16} color={Colors.primary} />
+              <Text style={[styles.headerChipText, resolvedStore.id && resolvedStore.id !== "unknown" ? styles.headerChipTextClickable : undefined]} numberOfLines={1}>
+                {resolvedStore.name
+                  ? `${resolvedStore.name} için teslimat bilgileri`
+                  : "Teslimat Bilgileri"}
+              </Text>
+              {resolvedStore.id && resolvedStore.id !== "unknown" ? <ChevronRight size={14} color={Colors.primary} /> : null}
+            </TouchableOpacity>
+          </Animated.View>
 
           {productInfoParam ? (
             <View style={styles.productChip}>
@@ -326,11 +363,19 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 12,
   },
+  headerChipClickable: {
+    borderWidth: 1,
+    borderColor: Colors.primary + "30",
+    backgroundColor: Colors.primary + "12",
+  },
   headerChipText: {
     fontSize: 14,
     fontWeight: "600" as const,
     color: Colors.primary,
     flex: 1,
+  },
+  headerChipTextClickable: {
+    textDecorationLine: "underline" as const,
   },
   productChip: {
     flexDirection: "row",
