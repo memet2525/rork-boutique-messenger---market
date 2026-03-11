@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Platform,
   KeyboardAvoidingView,
   ActivityIndicator,
+  Animated,
 } from "react-native";
 import { Stack, useLocalSearchParams, useRouter, RelativePathString } from "expo-router";
 import { Send, Package, MapPin, ChevronRight } from "lucide-react-native";
@@ -30,6 +31,33 @@ export default function AddressFormScreen() {
   const router = useRouter();
   const { showAlert } = useAlert();
   const [submitted, setSubmitted] = useState<boolean>(false);
+
+  const storeChipScale = useRef(new Animated.Value(1)).current;
+  const storeChipGlow = useRef(new Animated.Value(0.6)).current;
+
+  useEffect(() => {
+    if (storeId) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(storeChipGlow, { toValue: 1, duration: 1200, useNativeDriver: true }),
+          Animated.timing(storeChipGlow, { toValue: 0.6, duration: 1200, useNativeDriver: true }),
+        ])
+      ).start();
+    }
+  }, [storeId, storeChipGlow]);
+
+  const handleStorePress = useCallback(() => {
+    if (!storeId) return;
+    if (Platform.OS !== "web") {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    Animated.sequence([
+      Animated.timing(storeChipScale, { toValue: 0.95, duration: 80, useNativeDriver: true }),
+      Animated.timing(storeChipScale, { toValue: 1, duration: 80, useNativeDriver: true }),
+    ]).start(() => {
+      router.push(`/store/${storeId}` as RelativePathString);
+    });
+  }, [storeId, storeChipScale, router]);
 
   const [customerName, setCustomerName] = useState<string>("");
   const [customerPhone, setCustomerPhone] = useState<string>("");
@@ -90,7 +118,7 @@ export default function AddressFormScreen() {
     },
     onSuccess: () => {
       if (Platform.OS !== "web") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
       setSubmitted(true);
     },
@@ -178,22 +206,21 @@ export default function AddressFormScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          <TouchableOpacity
-            style={styles.headerChip}
-            activeOpacity={storeName && storeId ? 0.6 : 1}
-            onPress={() => {
-              if (storeId) {
-                router.push(`/store/${storeId}` as RelativePathString);
-              }
-            }}
-            disabled={!storeId}
-          >
-            <MapPin size={16} color={Colors.primary} />
-            <Text style={[styles.headerChipText, storeId ? styles.headerChipTextClickable : undefined]} numberOfLines={1}>
-              {storeName ? `${storeName} için teslimat bilgileri` : "Teslimat Bilgileri"}
-            </Text>
-            {storeId ? <ChevronRight size={14} color={Colors.primary} /> : null}
-          </TouchableOpacity>
+          <Animated.View style={{ transform: [{ scale: storeChipScale }], opacity: storeId ? storeChipGlow : 1 }}>
+            <TouchableOpacity
+              style={[styles.headerChip, storeId ? styles.headerChipClickable : undefined]}
+              activeOpacity={storeId ? 0.6 : 1}
+              onPress={handleStorePress}
+              disabled={!storeId}
+              testID="store-chip"
+            >
+              <MapPin size={16} color={Colors.primary} />
+              <Text style={[styles.headerChipText, storeId ? styles.headerChipTextClickable : undefined]} numberOfLines={1}>
+                {storeName ? `${storeName} için teslimat bilgileri` : "Teslimat Bilgileri"}
+              </Text>
+              {storeId ? <ChevronRight size={14} color={Colors.primary} /> : null}
+            </TouchableOpacity>
+          </Animated.View>
 
           {productInfo ? (
             <View style={styles.productChip}>
@@ -324,6 +351,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     marginBottom: 12,
+  },
+  headerChipClickable: {
+    borderWidth: 1,
+    borderColor: Colors.primary + "30",
+    backgroundColor: Colors.primary + "12",
   },
   headerChipText: {
     fontSize: 14,
