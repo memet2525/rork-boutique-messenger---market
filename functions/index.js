@@ -130,6 +130,18 @@ function getValidImageUrl(product, store) {
   return DEFAULT_IMAGE;
 }
 
+function getStoreProfileImageUrl(store) {
+  if (store) {
+    if (isValidHttpUrl(store.avatar)) {
+      return store.avatar.trim();
+    }
+    if (isValidHttpUrl(store.coverImage)) {
+      return store.coverImage.trim();
+    }
+  }
+  return DEFAULT_IMAGE;
+}
+
 function buildOgHtml(params) {
   const { title, description, image, url, type = "website" } = params;
   const safeTitle = escapeHtml(title);
@@ -266,10 +278,13 @@ exports.ogStorePreview = functions.https.onRequest(async (req, res) => {
       }
     }
 
+    const storeProfileImage = getStoreProfileImageUrl(storeData);
+    console.log("OG store profile:", storeData.name, "avatar:", storeProfileImage);
+
     const html = buildOgHtml({
       title: `${storeData.name} - ${SITE_NAME}`,
-      description: storeData.description || DEFAULT_DESCRIPTION,
-      image: getValidImageUrl(null, storeData),
+      description: `${storeData.name} mağazamı inceleyin! | ${SITE_NAME}`,
+      image: storeProfileImage,
       url: `https://${DOMAIN}/store/${storeSlug}`,
       type: "profile",
     });

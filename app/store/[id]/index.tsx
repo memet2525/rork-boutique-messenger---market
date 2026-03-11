@@ -364,22 +364,23 @@ export default function StoreDetailScreen() {
                 style={styles.topBarBtn}
                 onPress={async () => {
                   const storeLink = getStoreLink(store.name);
+                  const shareText = `${store.name} mağazamı inceleyin! ${storeLink}`;
                   if (Platform.OS === 'web') {
                     if (navigator.share) {
                       try {
-                        await navigator.share({ text: `${store.name} mağazasını keşfet! ${storeLink}` });
+                        await navigator.share({ title: store.name, text: shareText });
                       } catch (e) {
                         console.log('Share cancelled or failed', e);
                       }
                     } else {
                       try {
-                        await navigator.clipboard.writeText(`${store.name} mağazasını keşfet! ${storeLink}`);
+                        await navigator.clipboard.writeText(shareText);
                       } catch (e) {
                         console.log('Clipboard write failed', e);
                       }
                     }
                   } else {
-                    await Share.share({ message: `${store.name} mağazasını keşfet! ${storeLink}` });
+                    await Share.share({ title: store.name, message: shareText });
                   }
                 }}
                 testID="store-share-btn"
