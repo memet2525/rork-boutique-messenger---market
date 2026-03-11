@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect, useCallback } from "react";
+import React, { useEffect, useCallback, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Platform, TouchableOpacity } from "react-native";
 import { ChevronLeft } from "lucide-react-native";
@@ -165,7 +165,39 @@ function CustomHeaderBack({ tintColor }: { tintColor?: string }) {
   );
 }
 
+function useWebDeepLink() {
+  const router = useRouter();
+  const hasHandled = useRef(false);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined' || hasHandled.current) return;
+    hasHandled.current = true;
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const deepPath = params.get('_path');
+      if (deepPath) {
+        const decoded = decodeURIComponent(deepPath);
+        console.log('[WebDeepLink] Detected _path param:', decoded);
+        setTimeout(() => {
+          try {
+            window.history.replaceState(null, '', decoded);
+            router.replace(decoded as any);
+            console.log('[WebDeepLink] Navigated to:', decoded);
+          } catch (e) {
+            console.log('[WebDeepLink] Navigation error:', e);
+          }
+        }, 300);
+      }
+    } catch (e) {
+      console.log('[WebDeepLink] Error:', e);
+    }
+  }, [router]);
+}
+
 function RootLayoutNav() {
+  useWebDeepLink();
+
   return (
     <Stack screenOptions={{
       headerBackTitle: "Geri",

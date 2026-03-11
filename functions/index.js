@@ -11,38 +11,98 @@ const BOT_UA_REGEX = /facebookexternalhit|Twitterbot|WhatsApp|LinkedInBot|Slackb
 const https = require("https");
 
 let cachedIndexHtml = null;
+const FIREBASE_APP_DOMAIN = "butikbiz-66195.web.app";
 
-function fetchIndexHtmlFromHosting() {
+function fetchFromUrl(url) {
   return new Promise((resolve, reject) => {
-    https.get(`https://${DOMAIN}/index.html`, (resp) => {
-      if (resp.statusCode !== 200) {
-        reject(new Error(`Status ${resp.statusCode}`));
+    const makeRequest = (reqUrl, redirectCount) => {
+      if (redirectCount > 3) {
+        reject(new Error("Too many redirects"));
         return;
       }
-      let data = "";
-      resp.on("data", (chunk) => (data += chunk));
-      resp.on("end", () => resolve(data));
-    }).on("error", reject);
+      const reqModule = reqUrl.startsWith("https") ? https : require("http");
+      reqModule.get(reqUrl, { timeout: 5000 }, (resp) => {
+        if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
+          makeRequest(resp.headers.location, redirectCount + 1);
+          return;
+        }
+        if (resp.statusCode !== 200) {
+          reject(new Error(`Status ${resp.statusCode}`));
+          return;
+        }
+        let data = "";
+        resp.on("data", (chunk) => (data += chunk));
+        resp.on("end", () => resolve(data));
+      }).on("error", reject).on("timeout", () => reject(new Error("Timeout")));
+    };
+    makeRequest(url, 0);
   });
 }
 
 async function getIndexHtml() {
   if (cachedIndexHtml) return cachedIndexHtml;
-  try {
-    const indexPath = path.join(__dirname, "..", "dist", "index.html");
-    cachedIndexHtml = fs.readFileSync(indexPath, "utf8");
-  } catch (e) { // eslint-disable-line no-unused-vars
+  
+  const localPaths = [
+    path.join(__dirname, "..", "dist", "index.html"),
+    path.join(__dirname, "index.html"),
+    path.join(__dirname, "..", "web-build", "index.html"),
+  ];
+  
+  for (const p of localPaths) {
     try {
-      cachedIndexHtml = await fetchIndexHtmlFromHosting();
-    } catch (e2) { // eslint-disable-line no-unused-vars
-      cachedIndexHtml = null;
+      cachedIndexHtml = fs.readFileSync(p, "utf8");
+      console.log("Found index.html at:", p);
+      return cachedIndexHtml;
+    } catch (e) { } // eslint-disable-line no-unused-vars
+  }
+  
+  const urls = [
+    `https://${FIREBASE_APP_DOMAIN}/index.html`,
+    `https://${DOMAIN}/index.html`,
+  ];
+  
+  for (const url of urls) {
+    try {
+      cachedIndexHtml = await fetchFromUrl(url);
+      console.log("Fetched index.html from:", url);
+      return cachedIndexHtml;
+    } catch (e) {
+      console.log("Failed to fetch from:", url, e.message);
     }
   }
+  
+  cachedIndexHtml = null;
   return cachedIndexHtml;
 }
 
 function isBot(userAgent) {
   return BOT_UA_REGEX.test(userAgent || "");
+}
+
+function buildRedirectHtml(targetPath) {
+  const safePath = escapeHtml(targetPath);
+  return `<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${SITE_NAME}</title>
+  <meta property="og:title" content="${SITE_NAME}" />
+  <meta property="og:image" content="${DEFAULT_IMAGE}" />
+  <meta property="og:url" content="https://${DOMAIN}${safePath}" />
+  <style>body{display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;font-family:-apple-system,sans-serif;background:#f5f5f5}p{color:#666;font-size:16px}</style>
+  <script>
+    (function(){
+      var path = decodeURIComponent("${encodeURIComponent(targetPath)}");
+      if (window.location.pathname !== '/' || !window.location.search.includes('_path=')) {
+        window.location.replace('/?_path=' + encodeURIComponent(path));
+      }
+    })();
+  </script>
+  <noscript><meta http-equiv="refresh" content="0;url=/?_path=${encodeURIComponent(targetPath)}" /></noscript>
+</head>
+<body><p>Yönlendiriliyor...</p></body>
+</html>`;
 }
 
 async function serveIndexOrRedirect(req, res) {
@@ -52,8 +112,10 @@ async function serveIndexOrRedirect(req, res) {
     res.set("Cache-Control", "public, max-age=600, s-maxage=600");
     res.status(200).send(html);
   } else {
-    const encodedPath = encodeURIComponent(originalPath);
-    res.redirect(`https://${DOMAIN}/?_path=${encodedPath}`);
+    console.log("Could not get index.html, serving redirect HTML for:", originalPath);
+    const redirectHtml = buildRedirectHtml(originalPath);
+    res.set("Cache-Control", "public, max-age=60, s-maxage=60");
+    res.status(200).send(redirectHtml);
   }
 }
 
