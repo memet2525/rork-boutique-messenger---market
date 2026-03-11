@@ -692,6 +692,10 @@ export async function sendChatMessage(chatId: string, message: {
     const msgId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const now = new Date();
     const timeStr = now.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+    const productImage = message.productImage && message.productImage.trim().length > 0 ? message.productImage.trim() : undefined;
+    const productName = message.productName && message.productName.trim().length > 0 ? message.productName.trim() : undefined;
+    const productPrice = message.productPrice && message.productPrice.trim().length > 0 ? message.productPrice.trim() : undefined;
+    console.log("sendChatMessage: productImage:", productImage?.substring(0, 120), "productName:", productName, "productPrice:", productPrice);
     const msgData: FirestoreMessage = {
       id: msgId,
       text: message.text,
@@ -699,9 +703,9 @@ export async function sendChatMessage(chatId: string, message: {
       timestamp: timeStr,
       createdAt: now.toISOString(),
       isRead: false,
-      ...(message.productImage ? { productImage: message.productImage } : {}),
-      ...(message.productName ? { productName: message.productName } : {}),
-      ...(message.productPrice ? { productPrice: message.productPrice } : {}),
+      ...(productImage ? { productImage } : {}),
+      ...(productName ? { productName } : {}),
+      ...(productPrice ? { productPrice } : {}),
     };
     const msgRef = doc(db, "chats", chatId, "messages", msgId);
     await setDoc(msgRef, msgData);

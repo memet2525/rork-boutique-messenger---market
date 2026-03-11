@@ -111,7 +111,19 @@ function ProductMessageBubble({ message }: { message: DisplayMessage }) {
   }, [fadeAnim]);
 
   const isSent = message.isSent;
-  const hasValidImage = !!(message.productImage && message.productImage.trim().length > 0 && message.productImage.startsWith("http"));
+  const resolvedImage = React.useMemo(() => {
+    if (!message.productImage) return "";
+    let img = message.productImage.trim();
+    if (img.startsWith("http://") || img.startsWith("https://")) return img;
+    try {
+      const decoded = decodeURIComponent(img);
+      if (decoded.startsWith("http://") || decoded.startsWith("https://")) return decoded;
+    } catch (e) {
+      console.log("ProductMessageBubble decode error:", e);
+    }
+    return "";
+  }, [message.productImage]);
+  const hasValidImage = resolvedImage.length > 0;
 
   return (
     <Animated.View
@@ -124,7 +136,7 @@ function ProductMessageBubble({ message }: { message: DisplayMessage }) {
       <View style={[styles.bubbleContainer, isSent ? styles.sentContainer : styles.receivedContainer]}>
         <View style={[styles.bubble, isSent ? styles.sentBubble : styles.receivedBubble, { padding: 0, overflow: "hidden" as const }]}>
           {hasValidImage ? (
-            <Image source={{ uri: message.productImage }} style={styles.productCardImage} contentFit="cover" />
+            <Image source={{ uri: resolvedImage }} style={styles.productCardImage} contentFit="cover" />
           ) : (
             <View style={styles.productCardImagePlaceholder}>
               <Text style={styles.productCardImagePlaceholderText}>🛍️</Text>
@@ -502,18 +514,17 @@ export default function ChatDetailScreen() {
           let resolvedProductImage: string | undefined;
           if (productImage && productImage.trim().length > 0) {
             let raw = productImage.trim();
-            try {
-              const decoded = decodeURIComponent(raw);
-              if (decoded.startsWith("http://") || decoded.startsWith("https://")) {
-                resolvedProductImage = decoded;
-              } else if (raw.startsWith("http://") || raw.startsWith("https://")) {
-                resolvedProductImage = raw;
+            if (raw.startsWith("http://") || raw.startsWith("https://")) {
+              resolvedProductImage = raw;
+            } else {
+              try {
+                const decoded = decodeURIComponent(raw);
+                if (decoded.startsWith("http://") || decoded.startsWith("https://")) {
+                  resolvedProductImage = decoded;
+                }
+              } catch (e) {
+                console.log("Product image decode error:", e);
               }
-            } catch (e) {
-              if (raw.startsWith("http://") || raw.startsWith("https://")) {
-                resolvedProductImage = raw;
-              }
-              console.log("Product image decode error:", e);
             }
           }
           console.log("Sending product message with image:", id, "resolved:", resolvedProductImage?.substring(0, 120), "raw param:", productImage?.substring(0, 120));
