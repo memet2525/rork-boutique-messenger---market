@@ -399,20 +399,16 @@ export default function MarketplaceScreen() {
                   <Text style={styles.resultBadgeText}>{matchedProducts.length}</Text>
                 </View>
               </View>
-              <FlatList
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                data={matchedProducts}
-                keyExtractor={(item, index) => `product-${item.product.id}-${item.store.id}-${index}`}
-                contentContainerStyle={styles.productResultsList}
-                renderItem={({ item }) => (
+              <View style={styles.productResultsVerticalList}>
+                {matchedProducts.map((item, index) => (
                   <TouchableOpacity
-                    style={styles.productResultCard}
+                    key={`product-${item.product.id}-${item.store.id}-${index}`}
+                    style={styles.productResultCardVertical}
                     activeOpacity={0.7}
                     onPress={() => handleProductPress(item.product.id, item.store.id, item.store.ownerId || item.store.id)}
                   >
-                    <Image source={{ uri: item.product.image }} style={styles.productResultImage} />
-                    <View style={styles.productResultInfo}>
+                    <Image source={{ uri: item.product.image }} style={styles.productResultImageVertical} />
+                    <View style={styles.productResultInfoVertical}>
                       <Text style={styles.productResultName} numberOfLines={2}>{item.product.name}</Text>
                       <Text style={styles.productResultPrice}>{item.product.price}</Text>
                       <View style={styles.productResultStore}>
@@ -421,8 +417,8 @@ export default function MarketplaceScreen() {
                       </View>
                     </View>
                   </TouchableOpacity>
-                )}
-              />
+                ))}
+              </View>
               {filteredStores.length > 0 && (
                 <View style={styles.sectionHeader2}>
                   <StoreIcon size={16} color={Colors.primary} />
@@ -794,11 +790,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700" as const,
   },
-  productResultsList: {
+  productResultsVerticalList: {
     gap: 10,
   },
-  productResultCard: {
-    width: 140,
+  productResultCardVertical: {
+    flexDirection: "row",
     backgroundColor: Colors.white,
     borderRadius: 14,
     overflow: "hidden",
@@ -808,13 +804,15 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  productResultImage: {
-    width: "100%",
-    height: 130,
+  productResultImageVertical: {
+    width: 90,
+    height: 90,
     backgroundColor: Colors.border,
   },
-  productResultInfo: {
-    padding: 8,
+  productResultInfoVertical: {
+    flex: 1,
+    padding: 10,
+    justifyContent: "center",
   },
   productResultName: {
     fontSize: 12,
