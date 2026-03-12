@@ -9,17 +9,19 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Modal,
+  ScrollView,
 } from "react-native";
 import { Image } from "expo-image";
 import { RelativePathString, useRouter } from "expo-router";
-import { Heart, Store, RefreshCw, ChevronRight, Users, ShoppingBag } from "lucide-react-native";
+import { Heart, Store, RefreshCw, ChevronRight, Users, ShoppingBag, BarChart3, X, TrendingUp } from "lucide-react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import Colors from "@/constants/colors";
 import { useAlert } from "@/contexts/AlertContext";
 import { useUser, type FavoriteProductSnapshot, type StoreProduct } from "@/contexts/UserContext";
 import { stores as mockStores, type Product } from "@/mocks/stores";
-import { getFirestoreStores } from "@/services/firestore";
+import { getFirestoreStores, getAllUsers } from "@/services/firestore";
 
 type TabType = "favorites" | "following";
 
@@ -128,7 +130,9 @@ export default function FavoritesScreen() {
   } = useUser();
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<TabType>("favorites");
+  const [showFavStats, setShowFavStats] = useState<boolean>(false);
   const indicatorAnim = useRef(new Animated.Value(0)).current;
+  const modalScaleAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.spring(indicatorAnim, {
@@ -331,6 +335,69 @@ export default function FavoritesScreen() {
     });
   }, [router]);
 
+  const favStatsQuery = useQuery({
+    queryKey: ["favStatsAllUsers"],
+    queryFn: getAllUsers,
+    enabled: showFavStats && profile.isStore,
+    staleTime: 60000,
+  });
+
+  const favStats = useMemo(() => {
+    if (!profile.isStore || !favStatsQuery.data) return { products: [] as { id: string; name: string; image: string; price: string; favCount: number; users: string[] }[], totalFavs: 0, uniqueUsers: 0 };
+
+    const myProducts = profile.storeProducts ?? [];
+    const myProductIds = new Set(myProducts.map((p) => p.id));
+    const allUsersData = favStatsQuery.data;
+
+    const productMap = new Map<string, { name: string; image: string; price: string; favCount: number; users: string[] }>();
+    myProducts.forEach((p) => productMap.set(p.id, { name: p.name, image: p.image, price: p.price, favCount: 0, users: [] }));
+
+    const uniqueUserSet = new Set<string>();
+
+    for (const user of allUsersData) {
+      const userUid = (user.uid as string) ?? "";
+      if (userUid === uid) continue;
+      const userFavs: string[] = Array.isArray(user.favorites) ? user.favorites : [];
+      const userName = (user.name as string) || (user.firstName as string) || "Anonim";
+      for (const favId of userFavs) {
+        if (myProductIds.has(favId)) {
+          const entry = productMap.get(favId);
+          if (entry) {
+            entry.favCount += 1;
+            entry.users.push(userName);
+            uniqueUserSet.add(userUid);
+          }
+        }
+      }
+    }
+
+    const products = Array.from(productMap.entries())
+      .map(([id, data]) => ({ id, ...data }))
+      .sort((a, b) => b.favCount - a.favCount);
+
+    const totalFavs = products.reduce((sum, p) => sum + p.favCount, 0);
+
+    return { products, totalFavs, uniqueUsers: uniqueUserSet.size };
+  }, [profile.isStore, profile.storeProducts, favStatsQuery.data, uid]);
+
+  const handleOpenFavStats = useCallback(() => {
+    setShowFavStats(true);
+    Animated.spring(modalScaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 280,
+      friction: 22,
+    }).start();
+  }, [modalScaleAnim]);
+
+  const handleCloseFavStats = useCallback(() => {
+    Animated.timing(modalScaleAnim, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setShowFavStats(false));
+  }, [modalScaleAnim]);
+
   const switchTab = useCallback((tab: TabType) => {
     setActiveTab(tab);
   }, []);
@@ -467,20 +534,124 @@ export default function FavoritesScreen() {
     );
   }
 
+  const renderFavStatsModal = () => (
+    <Modal
+      visible={showFavStats}
+      transparent
+      animationType="fade"
+      onRequestClose={handleCloseFavStats}
+    >
+      <View style={styles.modalOverlay}>
+        <Animated.View style={[styles.modalContainer, { transform: [{ scale: modalScaleAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }], opacity: modalScaleAnim }]}>
+          <View style={styles.modalHeader}>
+            <View style={styles.modalTitleRow}>
+              <BarChart3 size={20} color={Colors.primary} />
+              <Text style={styles.modalTitle}>Favori İstatistikleri</Text>
+            </View>
+            <TouchableOpacity onPress={handleCloseFavStats} style={styles.modalCloseBtn} testID="close-fav-stats">
+              <X size={20} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          {favStatsQuery.isLoading ? (
+            <View style={styles.modalLoading}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+              <Text style={styles.modalLoadingText}>Veriler yükleniyor...</Text>
+            </View>
+          ) : (
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              <View style={styles.statsOverview}>
+                <View style={styles.statsCard}>
+                  <Heart size={22} color={Colors.danger} fill={Colors.danger} />
+                  <Text style={styles.statsCardNumber}>{favStats.totalFavs}</Text>
+                  <Text style={styles.statsCardLabel}>Toplam Favori</Text>
+                </View>
+                <View style={styles.statsCard}>
+                  <Users size={22} color={Colors.primary} />
+                  <Text style={styles.statsCardNumber}>{favStats.uniqueUsers}</Text>
+                  <Text style={styles.statsCardLabel}>Farklı Kişi</Text>
+                </View>
+                <View style={styles.statsCard}>
+                  <ShoppingBag size={22} color="#F59E0B" />
+                  <Text style={styles.statsCardNumber}>{favStats.products.filter((p) => p.favCount > 0).length}</Text>
+                  <Text style={styles.statsCardLabel}>Beğenilen Ürün</Text>
+                </View>
+              </View>
+
+              {favStats.products.length === 0 ? (
+                <View style={styles.noStatsState}>
+                  <Text style={styles.noStatsText}>Henüz mağazanızda ürün yok.</Text>
+                </View>
+              ) : (
+                <View style={styles.productStatsList}>
+                  {favStats.products.map((product, index) => (
+                    <View key={product.id} style={styles.productStatRow}>
+                      <View style={styles.productStatRank}>
+                        <Text style={styles.productStatRankText}>{index + 1}</Text>
+                      </View>
+                      <Image source={{ uri: product.image }} style={styles.productStatImage} />
+                      <View style={styles.productStatInfo}>
+                        <Text style={styles.productStatName} numberOfLines={1}>{product.name}</Text>
+                        <Text style={styles.productStatPrice}>{product.price}</Text>
+                        {product.favCount > 0 && product.users.length > 0 ? (
+                          <Text style={styles.productStatUsers} numberOfLines={1}>
+                            {product.users.slice(0, 3).join(", ")}{product.users.length > 3 ? ` +${product.users.length - 3}` : ""}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <View style={[styles.productStatBadge, product.favCount > 0 ? styles.productStatBadgeActive : styles.productStatBadgeEmpty]}>
+                        <Heart size={12} color={product.favCount > 0 ? Colors.danger : Colors.textLight} fill={product.favCount > 0 ? Colors.danger : "transparent"} />
+                        <Text style={[styles.productStatBadgeText, product.favCount > 0 ? styles.productStatBadgeTextActive : styles.productStatBadgeTextEmpty]}>
+                          {product.favCount}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+          )}
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+
   return (
     <View style={styles.container}>
       {renderTabBar()}
+      {renderFavStatsModal()}
       <FlatList
         data={favoriteItems}
         keyExtractor={(item) => item.snapshot.productId}
         contentContainerStyle={favoriteItems.length === 0 ? styles.emptyListContent : styles.listContent}
         ListHeaderComponent={
-          changedCount > 0 ? (
-            <View style={styles.changesInfoBar}>
-              <RefreshCw size={14} color={Colors.danger} />
-              <Text style={styles.changesInfoText}>{changedCount} üründe değişiklik var</Text>
-            </View>
-          ) : null
+          <>
+            {profile.isStore ? (
+              <TouchableOpacity
+                style={styles.favStatsButton}
+                activeOpacity={0.8}
+                onPress={handleOpenFavStats}
+                testID="fav-stats-btn"
+              >
+                <View style={styles.favStatsButtonLeft}>
+                  <View style={styles.favStatsIconWrap}>
+                    <TrendingUp size={18} color={Colors.white} />
+                  </View>
+                  <View>
+                    <Text style={styles.favStatsButtonTitle}>Ürünlerim Kimler Tarafından Beğenildi?</Text>
+                    <Text style={styles.favStatsButtonSub}>Favori istatistiklerini görüntüle</Text>
+                  </View>
+                </View>
+                <ChevronRight size={18} color={Colors.primary} />
+              </TouchableOpacity>
+            ) : null}
+            {changedCount > 0 ? (
+              <View style={styles.changesInfoBar}>
+                <RefreshCw size={14} color={Colors.danger} />
+                <Text style={styles.changesInfoText}>{changedCount} üründe değişiklik var</Text>
+              </View>
+            ) : null}
+          </>
         }
         refreshControl={
           <RefreshControl
@@ -909,5 +1080,205 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     textAlign: "center" as const,
     color: Colors.textSecondary,
+  },
+  favStatsButton: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "rgba(7, 94, 84, 0.1)",
+  },
+  favStatsButtonLeft: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 12,
+    flex: 1,
+  },
+  favStatsIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  favStatsButtonTitle: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: Colors.text,
+  },
+  favStatsButtonSub: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+    padding: 20,
+  },
+  modalContainer: {
+    width: "100%" as const,
+    maxHeight: "85%" as const,
+    backgroundColor: Colors.white,
+    borderRadius: 24,
+    overflow: "hidden" as const,
+  },
+  modalHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  modalTitleRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 10,
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "800" as const,
+    color: Colors.text,
+  },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.borderLight,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  modalLoading: {
+    paddingVertical: 60,
+    alignItems: "center" as const,
+    gap: 12,
+  },
+  modalLoadingText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  modalBody: {
+    padding: 16,
+  },
+  statsOverview: {
+    flexDirection: "row" as const,
+    gap: 10,
+    marginBottom: 20,
+  },
+  statsCard: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 10,
+    alignItems: "center" as const,
+    gap: 6,
+  },
+  statsCardNumber: {
+    fontSize: 22,
+    fontWeight: "900" as const,
+    color: Colors.text,
+  },
+  statsCardLabel: {
+    fontSize: 11,
+    fontWeight: "600" as const,
+    color: Colors.textSecondary,
+    textAlign: "center" as const,
+  },
+  noStatsState: {
+    paddingVertical: 40,
+    alignItems: "center" as const,
+  },
+  noStatsText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  productStatsList: {
+    gap: 8,
+    paddingBottom: 20,
+  },
+  productStatRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    backgroundColor: Colors.background,
+    borderRadius: 14,
+    padding: 10,
+    gap: 10,
+  },
+  productStatRank: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(7, 94, 84, 0.1)",
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  productStatRankText: {
+    fontSize: 11,
+    fontWeight: "800" as const,
+    color: Colors.primary,
+  },
+  productStatImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: Colors.border,
+  },
+  productStatInfo: {
+    flex: 1,
+  },
+  productStatName: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: Colors.text,
+  },
+  productStatPrice: {
+    fontSize: 12,
+    fontWeight: "600" as const,
+    color: Colors.primary,
+    marginTop: 2,
+  },
+  productStatUsers: {
+    fontSize: 10,
+    color: Colors.textLight,
+    marginTop: 2,
+  },
+  productStatBadge: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 4,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  productStatBadgeActive: {
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+  },
+  productStatBadgeEmpty: {
+    backgroundColor: "rgba(0,0,0,0.04)",
+  },
+  productStatBadgeText: {
+    fontSize: 13,
+    fontWeight: "800" as const,
+  },
+  productStatBadgeTextActive: {
+    color: Colors.danger,
+  },
+  productStatBadgeTextEmpty: {
+    color: Colors.textLight,
   },
 });
