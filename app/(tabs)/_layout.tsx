@@ -1,9 +1,8 @@
 import { Tabs, useRouter } from "expo-router";
-import { MessageCircle, User, Home, ShoppingBag, Heart, Eye, TrendingUp } from "lucide-react-native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, StyleSheet, View, Text } from "react-native";
+import { MessageCircle, User, Home, ShoppingBag, Heart } from "lucide-react-native";
+import React, { useCallback, useEffect, useRef } from "react";
+import { Animated, StyleSheet, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import Colors from "@/constants/colors";
 import { useUser } from "@/contexts/UserContext";
@@ -86,109 +85,6 @@ function FavoriteTabIcon({ focused }: { focused: boolean }) {
   );
 }
 
-const VISITOR_STORAGE_KEY = "@visitor_stats";
-const BASE_TOTAL = 10000;
-const BASE_DAILY = 100;
-
-interface VisitorStats {
-  totalVisits: number;
-  dailyVisits: number;
-  lastDate: string;
-}
-
-function getTodayStr() {
-  return new Date().toISOString().split("T")[0];
-}
-
-function useVisitorStats() {
-  const [stats, setStats] = useState<VisitorStats>({
-    totalVisits: BASE_TOTAL,
-    dailyVisits: BASE_DAILY,
-    lastDate: getTodayStr(),
-  });
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const raw = await AsyncStorage.getItem(VISITOR_STORAGE_KEY);
-        const today = getTodayStr();
-        if (raw) {
-          const parsed: VisitorStats = JSON.parse(raw);
-          if (parsed.lastDate !== today) {
-            const updated: VisitorStats = {
-              totalVisits: parsed.totalVisits + 1,
-              dailyVisits: BASE_DAILY + 1,
-              lastDate: today,
-            };
-            await AsyncStorage.setItem(VISITOR_STORAGE_KEY, JSON.stringify(updated));
-            setStats(updated);
-          } else {
-            const updated: VisitorStats = {
-              ...parsed,
-              totalVisits: parsed.totalVisits + 1,
-              dailyVisits: parsed.dailyVisits + 1,
-            };
-            await AsyncStorage.setItem(VISITOR_STORAGE_KEY, JSON.stringify(updated));
-            setStats(updated);
-          }
-        } else {
-          const initial: VisitorStats = {
-            totalVisits: BASE_TOTAL + 1,
-            dailyVisits: BASE_DAILY + 1,
-            lastDate: today,
-          };
-          await AsyncStorage.setItem(VISITOR_STORAGE_KEY, JSON.stringify(initial));
-          setStats(initial);
-        }
-      } catch (e) {
-        console.log("Visitor stats error:", e);
-      }
-    })();
-  }, []);
-
-  return stats;
-}
-
-function formatNumber(n: number): string {
-  if (n >= 1000) {
-    return (n / 1000).toFixed(1).replace(/\.0$/, "") + "B";
-  }
-  return n.toString();
-}
-
-function VisitorStrip() {
-  const stats = useVisitorStats();
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 600,
-      useNativeDriver: true,
-    }).start();
-  }, [fadeAnim]);
-
-  return (
-    <Animated.View style={[visitorStyles.strip, { opacity: fadeAnim }]}>
-      <View style={visitorStyles.statItem}>
-        <View style={visitorStyles.iconDot}>
-          <Eye color="#fff" size={11} strokeWidth={2.5} />
-        </View>
-        <Text style={visitorStyles.statValue}>{formatNumber(stats.dailyVisits)}</Text>
-        <Text style={visitorStyles.statLabel}>Bugün</Text>
-      </View>
-      <View style={visitorStyles.divider} />
-      <View style={visitorStyles.statItem}>
-        <View style={[visitorStyles.iconDot, { backgroundColor: Colors.primary }]}>
-          <TrendingUp color="#fff" size={11} strokeWidth={2.5} />
-        </View>
-        <Text style={visitorStyles.statValue}>{formatNumber(stats.totalVisits)}</Text>
-        <Text style={visitorStyles.statLabel}>Toplam</Text>
-      </View>
-    </Animated.View>
-  );
-}
-
 export default function TabLayout() {
   const { isLoggedIn, uid, profile } = useUser();
   const router = useRouter();
@@ -218,7 +114,6 @@ export default function TabLayout() {
   }, [isLoggedIn, router, showAlert]);
 
   return (
-    <View style={{ flex: 1 }}>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -318,8 +213,6 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
-    <VisitorStrip />
-    </View>
   );
 }
 
@@ -357,44 +250,3 @@ const tabStyles = StyleSheet.create({
   },
 });
 
-const visitorStyles = StyleSheet.create({
-  strip: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F7F8FA",
-    borderTopWidth: 1,
-    borderTopColor: "#E8ECF0",
-    paddingVertical: 5,
-    gap: 12,
-  },
-  statItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  iconDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "#F59E0B",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  statValue: {
-    fontSize: 13,
-    fontWeight: "700" as const,
-    color: Colors.text,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    fontWeight: "500" as const,
-  },
-  divider: {
-    width: 1,
-    height: 16,
-    backgroundColor: "#D1D5DB",
-    marginHorizontal: 4,
-  },
-});
