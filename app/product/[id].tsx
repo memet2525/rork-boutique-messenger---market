@@ -13,6 +13,8 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   Modal,
+  PanResponder,
+  GestureResponderEvent,
 } from "react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter, Stack, RelativePathString } from "expo-router";
@@ -34,6 +36,141 @@ import { useUser, type FavoriteProductSnapshot } from "@/contexts/UserContext";
 import { useAlert } from "@/contexts/AlertContext";
 import { getProductLink } from "@/utils/links";
 import { getChatId, getFirestoreStore, getOrCreateChat } from "@/services/firestore";
+
+interface ZoomableImageProps {
+  uri: string;
+  width: number;
+  height: number;
+}
+
+function ZoomableImage({ uri, width, height }: ZoomableImageProps) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const translateX = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
+  const lastScale = useRef(1);
+  const lastTranslateX = useRef(0);
+  const lastTranslateY = useRef(0);
+  const initialDistance = useRef(0);
+  const lastTap = useRef(0);
+  const isPinching = useRef(false);
+  const initialPinchX = useRef(0);
+  const initialPinchY = useRef(0);
+
+  const getDistance = (touches: GestureResponderEvent["nativeEvent"]["touches"]) => {
+    if (!touches || touches.length < 2) return 0;
+    const dx = (touches[0]?.pageX ?? 0) - (touches[1]?.pageX ?? 0);
+    const dy = (touches[0]?.pageY ?? 0) - (touches[1]?.pageY ?? 0);
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const resetZoom = useCallback(() => {
+    lastScale.current = 1;
+    lastTranslateX.current = 0;
+    lastTranslateY.current = 0;
+    Animated.parallel([
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 7 }),
+      Animated.spring(translateX, { toValue: 0, useNativeDriver: true, friction: 7 }),
+      Animated.spring(translateY, { toValue: 0, useNativeDriver: true, friction: 7 }),
+    ]).start();
+  }, [scale, translateX, translateY]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2 || isPinching.current;
+      },
+      onPanResponderGrant: (evt) => {
+        const now = Date.now();
+        if (evt.nativeEvent.touches.length === 1 && now - lastTap.current < 300) {
+          if (lastScale.current > 1.1) {
+            resetZoom();
+          } else {
+            lastScale.current = 2.5;
+            lastTranslateX.current = 0;
+            lastTranslateY.current = 0;
+            Animated.parallel([
+              Animated.spring(scale, { toValue: 2.5, useNativeDriver: true, friction: 7 }),
+              Animated.spring(translateX, { toValue: 0, useNativeDriver: true, friction: 7 }),
+              Animated.spring(translateY, { toValue: 0, useNativeDriver: true, friction: 7 }),
+            ]).start();
+          }
+          lastTap.current = 0;
+          return;
+        }
+        lastTap.current = now;
+
+        if (evt.nativeEvent.touches.length >= 2) {
+          isPinching.current = true;
+          initialDistance.current = getDistance(evt.nativeEvent.touches);
+          initialPinchX.current = lastTranslateX.current;
+          initialPinchY.current = lastTranslateY.current;
+        }
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (evt.nativeEvent.touches.length >= 2) {
+          isPinching.current = true;
+          const dist = getDistance(evt.nativeEvent.touches);
+          if (initialDistance.current > 0 && dist > 0) {
+            const newScale = Math.min(Math.max(lastScale.current * (dist / initialDistance.current), 1), 5);
+            scale.setValue(newScale);
+          }
+        } else if (lastScale.current > 1.05 && !isPinching.current) {
+          const newX = lastTranslateX.current + gestureState.dx;
+          const newY = lastTranslateY.current + gestureState.dy;
+          translateX.setValue(newX);
+          translateY.setValue(newY);
+        }
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (isPinching.current) {
+          const currentScale = (scale as any).__getValue?.() ?? lastScale.current;
+          if (currentScale < 1.1) {
+            resetZoom();
+          } else {
+            lastScale.current = currentScale;
+            lastTranslateX.current = initialPinchX.current;
+            lastTranslateY.current = initialPinchY.current;
+          }
+          isPinching.current = false;
+          initialDistance.current = 0;
+        } else if (lastScale.current > 1.05) {
+          lastTranslateX.current += gestureState.dx;
+          lastTranslateY.current += gestureState.dy;
+        }
+      },
+    })
+  ).current;
+
+  return (
+    <Animated.View
+      style={{
+        width,
+        height,
+        overflow: "hidden" as const,
+      }}
+      {...panResponder.panHandlers}
+    >
+      <Animated.View
+        style={{
+          width,
+          height,
+          transform: [
+            { translateX },
+            { translateY },
+            { scale },
+          ],
+        }}
+      >
+        <Image
+          source={{ uri }}
+          style={{ width, height, borderRadius: 12, backgroundColor: "transparent" }}
+          contentFit="contain"
+        />
+      </Animated.View>
+    </Animated.View>
+  );
+}
 
 export default function ProductDetailScreen() {
   const { id, storeId, storeOwnerId: storeOwnerIdParam } = useLocalSearchParams<{ id: string; storeId: string; storeOwnerId?: string }>();
@@ -608,13 +745,10 @@ export default function ProductDetailScreen() {
                     })}
                     keyExtractor={(item, index) => `viewer-${item}-${index}`}
                     renderItem={({ item }) => (
-                      <Image
-                        source={{ uri: item }}
-                        style={[
-                          styles.viewerImage,
-                          { width: windowWidth - 32, height: viewerImageHeight },
-                        ]}
-                        contentFit="contain"
+                      <ZoomableImage
+                        uri={item}
+                        width={windowWidth - 32}
+                        height={viewerImageHeight}
                       />
                     )}
                   />
@@ -631,13 +765,10 @@ export default function ProductDetailScreen() {
                   </View>
                 </>
               ) : (
-                <Image
-                  source={{ uri: productData.image }}
-                  style={[
-                    styles.viewerImage,
-                    { width: windowWidth - 32, height: viewerImageHeight },
-                  ]}
-                  contentFit="contain"
+                <ZoomableImage
+                  uri={productData.image}
+                  width={windowWidth - 32}
+                  height={viewerImageHeight}
                 />
               )}
             </Animated.View>
