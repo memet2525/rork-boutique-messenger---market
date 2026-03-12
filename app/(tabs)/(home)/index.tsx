@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { useRouter, RelativePathString } from "expo-router";
-import { Search, Star, MapPin, LogIn, X, Download } from "lucide-react-native";
+import { Search, Star, MapPin, LogIn, X, Download, ShoppingBag, Store as StoreIcon } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -225,13 +225,37 @@ export default function MarketplaceScreen() {
     return list;
   }, [profile, firestoreStoresQuery.data, uid]);
 
-  const filteredStores = allStores.filter((store) => {
-    if (!store.isOnline) return false;
-    const matchesSearch = store.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      store.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === "Tümü" || store.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  const { filteredStores, matchedProducts } = useMemo(() => {
+    const query = searchQuery.toLowerCase().trim();
+    const stores: Store[] = [];
+    const products: { product: Product; store: Store }[] = [];
+
+    for (const store of allStores) {
+      if (!store.isOnline) continue;
+      const matchesCategory = selectedCategory === "Tümü" || store.category === selectedCategory;
+      if (!matchesCategory) continue;
+
+      if (!query) {
+        stores.push(store);
+        continue;
+      }
+
+      const storeNameMatch = store.name.toLowerCase().includes(query);
+      const storeDescMatch = store.description.toLowerCase().includes(query);
+
+      if (storeNameMatch || storeDescMatch) {
+        stores.push(store);
+      }
+
+      for (const product of store.products) {
+        if (product.name.toLowerCase().includes(query)) {
+          products.push({ product, store });
+        }
+      }
+    }
+
+    return { filteredStores: stores, matchedProducts: products };
+  }, [allStores, searchQuery, selectedCategory]);
 
   const handleStorePress = useCallback((storeId: string) => {
     router.push(`/store/${storeId}` as any);
@@ -365,12 +389,60 @@ export default function MarketplaceScreen() {
             colors={[Colors.primary]}
           />
         }
+        ListHeaderComponent={
+          matchedProducts.length > 0 && searchQuery.trim().length > 0 ? (
+            <View style={styles.productResultsSection}>
+              <View style={styles.sectionHeader}>
+                <ShoppingBag size={16} color={Colors.primary} />
+                <Text style={styles.sectionTitle}>Ürünler</Text>
+                <View style={styles.resultBadge}>
+                  <Text style={styles.resultBadgeText}>{matchedProducts.length}</Text>
+                </View>
+              </View>
+              <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                data={matchedProducts}
+                keyExtractor={(item, index) => `product-${item.product.id}-${item.store.id}-${index}`}
+                contentContainerStyle={styles.productResultsList}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.productResultCard}
+                    activeOpacity={0.7}
+                    onPress={() => handleProductPress(item.product.id, item.store.id, item.store.ownerId || item.store.id)}
+                  >
+                    <Image source={{ uri: item.product.image }} style={styles.productResultImage} />
+                    <View style={styles.productResultInfo}>
+                      <Text style={styles.productResultName} numberOfLines={2}>{item.product.name}</Text>
+                      <Text style={styles.productResultPrice}>{item.product.price}</Text>
+                      <View style={styles.productResultStore}>
+                        <Image source={{ uri: item.store.avatar }} style={styles.productResultStoreAvatar} />
+                        <Text style={styles.productResultStoreName} numberOfLines={1}>{item.store.name}</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              />
+              {filteredStores.length > 0 && (
+                <View style={styles.sectionHeader2}>
+                  <StoreIcon size={16} color={Colors.primary} />
+                  <Text style={styles.sectionTitle}>Mağazalar</Text>
+                  <View style={styles.resultBadge}>
+                    <Text style={styles.resultBadgeText}>{filteredStores.length}</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <MapPin size={48} color={Colors.textLight} />
-            <Text style={styles.emptyText}>Mağaza bulunamadı</Text>
-            <Text style={styles.emptySubtext}>Farklı bir arama deneyin</Text>
-          </View>
+          matchedProducts.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <MapPin size={48} color={Colors.textLight} />
+              <Text style={styles.emptyText}>Sonuç bulunamadı</Text>
+              <Text style={styles.emptySubtext}>Farklı bir arama deneyin</Text>
+            </View>
+          ) : null
         }
         ListFooterComponent={<Footer />}
       />
@@ -689,5 +761,92 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     color: Colors.textLight,
+  },
+  productResultsSection: {
+    marginBottom: 4,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 10,
+  },
+  sectionHeader2: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 14,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "700" as const,
+    color: Colors.text,
+  },
+  resultBadge: {
+    backgroundColor: Colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    marginLeft: 2,
+  },
+  resultBadgeText: {
+    color: Colors.white,
+    fontSize: 11,
+    fontWeight: "700" as const,
+  },
+  productResultsList: {
+    gap: 10,
+  },
+  productResultCard: {
+    width: 140,
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  productResultImage: {
+    width: "100%",
+    height: 130,
+    backgroundColor: Colors.border,
+  },
+  productResultInfo: {
+    padding: 8,
+  },
+  productResultName: {
+    fontSize: 12,
+    fontWeight: "600" as const,
+    color: Colors.text,
+    lineHeight: 16,
+  },
+  productResultPrice: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: Colors.primary,
+    marginTop: 3,
+  },
+  productResultStore: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 0.5,
+    borderTopColor: Colors.border,
+  },
+  productResultStoreAvatar: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Colors.border,
+  },
+  productResultStoreName: {
+    fontSize: 10,
+    color: Colors.textLight,
+    fontWeight: "500" as const,
+    flex: 1,
   },
 });
