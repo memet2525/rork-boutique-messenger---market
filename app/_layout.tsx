@@ -3,8 +3,7 @@ import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useCallback, useRef, useState } from "react";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { Platform, TouchableOpacity } from "react-native";
+import { Platform, TouchableOpacity, View } from "react-native";
 import { ChevronLeft } from "lucide-react-native";
 
 import { UserProvider } from "@/contexts/UserContext";
@@ -205,6 +204,14 @@ function useWebDeepLink() {
   }, [router]);
 }
 
+function RootInnerWrapper({ children }: { children: React.ReactNode }) {
+  if (Platform.OS === 'web') {
+    return <View style={{ flex: 1 }}>{children}</View>;
+  }
+  const { GestureHandlerRootView } = require('react-native-gesture-handler');
+  return <GestureHandlerRootView style={{ flex: 1 }}>{children}</GestureHandlerRootView>;
+}
+
 function RootLayoutNav() {
   useWebDeepLink();
 
@@ -259,10 +266,10 @@ export default function RootLayout() {
         <AlertProvider>
           <UserProvider>
             <AdminProvider>
-              <GestureHandlerRootView style={{ flex: 1 }}>
+              <RootInnerWrapper>
                 <StatusBar style="light" />
                 <RootLayoutNav />
-              </GestureHandlerRootView>
+              </RootInnerWrapper>
             </AdminProvider>
           </UserProvider>
         </AlertProvider>
