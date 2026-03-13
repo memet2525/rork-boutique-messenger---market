@@ -4,7 +4,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useCallback, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { Platform, TouchableOpacity, View } from "react-native";
+import { Platform, TouchableOpacity } from "react-native";
 import { ChevronLeft } from "lucide-react-native";
 
 import { UserProvider } from "@/contexts/UserContext";
@@ -259,17 +259,10 @@ export default function RootLayout() {
         <AlertProvider>
           <UserProvider>
             <AdminProvider>
-              {Platform.OS === 'web' ? (
-                <View style={{ flex: 1 }}>
-                  <StatusBar style="light" />
-                  <RootLayoutNav />
-                </View>
-              ) : (
-                <GestureHandlerRootView style={{ flex: 1 }}>
-                  <StatusBar style="light" />
-                  <RootLayoutNav />
-                </GestureHandlerRootView>
-              )}
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <StatusBar style="light" />
+                <RootLayoutNav />
+              </GestureHandlerRootView>
             </AdminProvider>
           </UserProvider>
         </AlertProvider>
