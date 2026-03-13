@@ -3,13 +3,27 @@ import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useCallback, useRef, useState } from "react";
-import { Platform, TouchableOpacity, View } from "react-native";
+import { Platform, TouchableOpacity, View, LogBox } from "react-native";
 import { ChevronLeft } from "lucide-react-native";
 
 import { UserProvider } from "@/contexts/UserContext";
 import { AdminProvider } from "@/contexts/AdminContext";
 import { AlertProvider } from "@/contexts/AlertContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
+
+LogBox.ignoreLogs([
+  'Detected multiple renderers concurrently rendering the same context provider',
+]);
+
+if (Platform.OS === 'web' && typeof globalThis !== 'undefined') {
+  const origWarn = console.error;
+  console.error = (...args: unknown[]) => {
+    if (typeof args[0] === 'string' && args[0].includes('Detected multiple renderers concurrently rendering the same context provider')) {
+      return;
+    }
+    origWarn(...args);
+  };
+}
 
 try {
   require("@/config/firebase");
