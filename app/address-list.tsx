@@ -30,7 +30,12 @@ import {
   Sparkles,
 } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
-import * as Print from "expo-print";
+let Print: any = null;
+if (typeof window === "undefined" || !("document" in globalThis)) {
+  import("expo-print").then((mod) => { Print = mod; }).catch(() => {});
+} else {
+  import("expo-print").then((mod) => { Print = mod; }).catch((e) => console.log("expo-print not available on web:", e));
+}
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import Colors from "@/constants/colors";
@@ -325,7 +330,11 @@ export default function AddressListScreen() {
           showAlert("Hata", "Yazdırma penceresi açılamadı. Lütfen popup engelleyiciyi kapatın.");
         }
       } else {
-        await Print.printAsync({ html: printHtml });
+        if (Print && Print.printAsync) {
+          await Print.printAsync({ html: printHtml });
+        } else {
+          showAlert("Hata", "Yazdırma bu platformda desteklenmiyor.");
+        }
       }
     } catch (e) {
       console.log("Print error:", e);

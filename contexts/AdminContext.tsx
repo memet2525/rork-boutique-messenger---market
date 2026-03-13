@@ -291,22 +291,30 @@ export const [AdminProvider, useAdmin] = createContextHook(() => {
   const [authUid, setAuthUid] = useState<string | null>(auth.currentUser?.uid ?? null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log("AdminContext: Auth state changed:", user?.uid ?? "signed out");
-      const newUid = user?.uid ?? null;
-      setAuthUid(newUid);
+    let unsubscribe: (() => void) | undefined;
+    try {
+      unsubscribe = onAuthStateChanged(auth, (user) => {
+        console.log("AdminContext: Auth state changed:", user?.uid ?? "signed out");
+        const newUid = user?.uid ?? null;
+        setAuthUid(newUid);
+        setAuthReady(true);
+        if (user) {
+          setTimeout(() => {
+            console.log("AdminContext: Invalidating all admin queries for uid:", newUid);
+            void queryClient.invalidateQueries({ queryKey: ["adminAllUsers"] });
+            void queryClient.invalidateQueries({ queryKey: ["adminAllStores"] });
+            void queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] });
+            void queryClient.invalidateQueries({ queryKey: ["adminRegistryStores"] });
+          }, 500);
+        }
+      });
+    } catch (e) {
+      console.error("[AdminContext] onAuthStateChanged error:", e);
       setAuthReady(true);
-      if (user) {
-        setTimeout(() => {
-          console.log("AdminContext: Invalidating all admin queries for uid:", newUid);
-          void queryClient.invalidateQueries({ queryKey: ["adminAllUsers"] });
-          void queryClient.invalidateQueries({ queryKey: ["adminAllStores"] });
-          void queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] });
-          void queryClient.invalidateQueries({ queryKey: ["adminRegistryStores"] });
-        }, 500);
-      }
-    });
-    return unsubscribe;
+    }
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, [queryClient]);
 
   const isAuthenticated = authReady && !!authUid;

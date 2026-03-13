@@ -10,15 +10,25 @@ import { ChevronLeft } from "lucide-react-native";
 import { UserProvider } from "@/contexts/UserContext";
 import { AdminProvider } from "@/contexts/AdminContext";
 import { AlertProvider } from "@/contexts/AlertContext";
-import "@/config/firebase";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
+try {
+  require("@/config/firebase");
+} catch (e) {
+  console.error("[RootLayout] Firebase initialization error:", e);
+}
 
-void SplashScreen.preventAutoHideAsync();
+try {
+  void SplashScreen.preventAutoHideAsync();
+} catch (e) {
+  console.error("[RootLayout] SplashScreen.preventAutoHideAsync error:", e);
+}
 
 const queryClient = new QueryClient();
 
 function setupWebMeta() {
-  if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+  try {
     const html = document.documentElement;
     html.setAttribute('lang', 'tr');
     html.setAttribute('translate', 'no');
@@ -146,6 +156,8 @@ function setupWebMeta() {
       ::-webkit-scrollbar { display: none; }
     `;
     document.head.appendChild(style);
+  } catch (e) {
+    console.error('[RootLayout] setupWebMeta error:', e);
   }
 }
 
@@ -226,25 +238,35 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   useEffect(() => {
-    void SplashScreen.hideAsync();
+    try {
+      void SplashScreen.hideAsync();
+    } catch (e) {
+      console.error('[RootLayout] SplashScreen.hideAsync error:', e);
+    }
     setupWebMeta();
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      document.title = 'ButikBiz - Butikler icin akilli satis';
+      try {
+        document.title = 'ButikBiz - Butikler icin akilli satis';
+      } catch (e) {
+        console.error('[RootLayout] document.title error:', e);
+      }
     }
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <AlertProvider>
-        <UserProvider>
-          <AdminProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <StatusBar style="light" />
-              <RootLayoutNav />
-            </GestureHandlerRootView>
-          </AdminProvider>
-        </UserProvider>
-      </AlertProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AlertProvider>
+          <UserProvider>
+            <AdminProvider>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <StatusBar style="light" />
+                <RootLayoutNav />
+              </GestureHandlerRootView>
+            </AdminProvider>
+          </UserProvider>
+        </AlertProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

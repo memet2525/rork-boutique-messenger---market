@@ -1,6 +1,8 @@
-import { Audio } from "expo-av";
+import { Platform } from "react-native";
 
-let soundInstance: Audio.Sound | null = null;
+let AudioModule: any = null;
+let soundInstance: any = null;
+let addressSoundInstance: any = null;
 let isInitialized = false;
 
 const NOTIFICATION_SOUND_URL =
@@ -9,9 +11,35 @@ const NOTIFICATION_SOUND_URL =
 const ADDRESS_SOUND_URL =
   "https://assets.mixkit.co/active_storage/sfx/1518/1518-preview.mp3";
 
+async function getAudio(): Promise<any> {
+  if (AudioModule) return AudioModule;
+  try {
+    const mod = await import("expo-av");
+    AudioModule = mod.Audio;
+    return AudioModule;
+  } catch (e) {
+    console.log("[NotificationSound] expo-av import failed:", e);
+    return null;
+  }
+}
+
+function playWebAudio(url: string, volume: number): void {
+  try {
+    if (typeof window !== "undefined" && typeof window.Audio !== "undefined") {
+      const audio = new window.Audio(url);
+      audio.volume = volume;
+      audio.play().catch((e: unknown) => console.log("Web audio play failed:", e));
+    }
+  } catch (e) {
+    console.log("Web audio error:", e);
+  }
+}
+
 async function initAudio(): Promise<void> {
   if (isInitialized) return;
   try {
+    const Audio = await getAudio();
+    if (!Audio) return;
     await Audio.setAudioModeAsync({
       playsInSilentModeIOS: true,
       shouldDuckAndroid: true,
@@ -25,7 +53,14 @@ async function initAudio(): Promise<void> {
 
 export async function playNotificationSound(): Promise<void> {
   try {
+    if (Platform.OS === "web") {
+      playWebAudio(NOTIFICATION_SOUND_URL, 0.7);
+      return;
+    }
+
     await initAudio();
+    const Audio = await getAudio();
+    if (!Audio) return;
 
     if (soundInstance) {
       try {
@@ -42,7 +77,7 @@ export async function playNotificationSound(): Promise<void> {
     );
     soundInstance = sound;
 
-    sound.setOnPlaybackStatusUpdate((status) => {
+    sound.setOnPlaybackStatusUpdate((status: any) => {
       if (status.isLoaded && status.didJustFinish) {
         sound.unloadAsync().catch(() => {});
         if (soundInstance === sound) {
@@ -57,11 +92,16 @@ export async function playNotificationSound(): Promise<void> {
   }
 }
 
-let addressSoundInstance: Audio.Sound | null = null;
-
 export async function playAddressNotificationSound(): Promise<void> {
   try {
+    if (Platform.OS === "web") {
+      playWebAudio(ADDRESS_SOUND_URL, 0.8);
+      return;
+    }
+
     await initAudio();
+    const Audio = await getAudio();
+    if (!Audio) return;
 
     if (addressSoundInstance) {
       try {
@@ -78,7 +118,7 @@ export async function playAddressNotificationSound(): Promise<void> {
     );
     addressSoundInstance = sound;
 
-    sound.setOnPlaybackStatusUpdate((status) => {
+    sound.setOnPlaybackStatusUpdate((status: any) => {
       if (status.isLoaded && status.didJustFinish) {
         sound.unloadAsync().catch(() => {});
         if (addressSoundInstance === sound) {
@@ -94,12 +134,16 @@ export async function playAddressNotificationSound(): Promise<void> {
 }
 
 export function cleanupSound(): void {
-  if (soundInstance) {
-    soundInstance.unloadAsync().catch(() => {});
-    soundInstance = null;
-  }
-  if (addressSoundInstance) {
-    addressSoundInstance.unloadAsync().catch(() => {});
-    addressSoundInstance = null;
+  try {
+    if (soundInstance) {
+      soundInstance.unloadAsync().catch(() => {});
+      soundInstance = null;
+    }
+    if (addressSoundInstance) {
+      addressSoundInstance.unloadAsync().catch(() => {});
+      addressSoundInstance = null;
+    }
+  } catch (e) {
+    console.log("Cleanup sound error:", e);
   }
 }

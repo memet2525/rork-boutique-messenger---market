@@ -1,7 +1,7 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
-import { getStorage } from "firebase/storage";
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
+import { getFirestore, type Firestore } from "firebase/firestore";
+import { getAuth, type Auth } from "firebase/auth";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDj8rf8Wc3YuDrKohjVzUlEChIWU1irQrQ",
@@ -13,10 +13,24 @@ const firebaseConfig = {
   measurementId: "G-YX48NHB2B2",
 };
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+let app: FirebaseApp;
+let db: Firestore;
+let auth: Auth;
+let storage: FirebaseStorage;
 
-export const db = getFirestore(app);
-export const auth = getAuth(app);
-export const storage = getStorage(app);
+try {
+  app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+  db = getFirestore(app);
+  auth = getAuth(app);
+  storage = getStorage(app);
+  console.log("[Firebase] Initialized successfully");
+} catch (e) {
+  console.error("[Firebase] Initialization error:", e);
+  app = {} as FirebaseApp;
+  db = {} as Firestore;
+  auth = {} as Auth;
+  storage = {} as FirebaseStorage;
+}
 
+export { db, auth, storage };
 export default app;

@@ -207,18 +207,26 @@ export const [UserProvider, useUser] = createContextHook(() => {
   }, [profile]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log("Firebase Auth state:", user?.uid ?? "signed out");
-      if (user) {
-        setUid(user.uid);
-        setIsLoggedIn(true);
-      } else {
-        setUid(null);
-        setIsLoggedIn(false);
-      }
+    let unsubscribe: (() => void) | undefined;
+    try {
+      unsubscribe = onAuthStateChanged(auth, (user) => {
+        console.log("Firebase Auth state:", user?.uid ?? "signed out");
+        if (user) {
+          setUid(user.uid);
+          setIsLoggedIn(true);
+        } else {
+          setUid(null);
+          setIsLoggedIn(false);
+        }
+        setAuthLoading(false);
+      });
+    } catch (e) {
+      console.error("[UserContext] onAuthStateChanged error:", e);
       setAuthLoading(false);
-    });
-    return unsubscribe;
+    }
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   const profileQuery = useQuery({
