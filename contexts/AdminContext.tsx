@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import createContextHook from "@nkzw/create-context-hook";
-import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/config/firebase";
+import { useUser } from "@/contexts/UserContext";
 import {
   getAdminSettings,
   saveAdminSettings,
@@ -284,40 +284,31 @@ function getFirestoreDate(data: Record<string, any>, field: string): string {
 
 export const [AdminProvider, useAdmin] = createContextHook(() => {
   const queryClient = useQueryClient();
+  const { uid: authUid, authLoading } = useUser();
   const [stores, setStores] = useState<StoreMember[]>([]);
   const [customers, setCustomers] = useState<CustomerMember[]>([]);
   const [settings, setSettings] = useState<AdminSettings>({ aiApiKey: "", aiProvider: "openai", sellerAgreement: DEFAULT_SELLER_AGREEMENT, userAgreement: DEFAULT_USER_AGREEMENT, footerContent: DEFAULT_FOOTER_CONTENT, siteName: "butikbiz" });
-  const [authReady, setAuthReady] = useState<boolean>(!!auth.currentUser);
-  const [authUid, setAuthUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+
+  const prevUidRef = useRef<string | null>(null);
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-    try {
-      unsubscribe = onAuthStateChanged(auth, (user) => {
-        console.log("AdminContext: Auth state changed:", user?.uid ?? "signed out");
-        const newUid = user?.uid ?? null;
-        setAuthUid(newUid);
-        setAuthReady(true);
-        if (user) {
-          setTimeout(() => {
-            console.log("AdminContext: Invalidating all admin queries for uid:", newUid);
-            void queryClient.invalidateQueries({ queryKey: ["adminAllUsers"] });
-            void queryClient.invalidateQueries({ queryKey: ["adminAllStores"] });
-            void queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] });
-            void queryClient.invalidateQueries({ queryKey: ["adminRegistryStores"] });
-          }, 500);
-        }
-      });
-    } catch (e) {
-      console.error("[AdminContext] onAuthStateChanged error:", e);
-      setAuthReady(true);
+    if (authLoading) return;
+    if (authUid && authUid !== prevUidRef.current) {
+      console.log("AdminContext: Auth uid changed:", authUid);
+      prevUidRef.current = authUid;
+      setTimeout(() => {
+        console.log("AdminContext: Invalidating all admin queries for uid:", authUid);
+        void queryClient.invalidateQueries({ queryKey: ["adminAllUsers"] });
+        void queryClient.invalidateQueries({ queryKey: ["adminAllStores"] });
+        void queryClient.invalidateQueries({ queryKey: ["adminRegistryUsers"] });
+        void queryClient.invalidateQueries({ queryKey: ["adminRegistryStores"] });
+      }, 500);
+    } else if (!authUid) {
+      prevUidRef.current = null;
     }
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, [queryClient]);
+  }, [authUid, authLoading, queryClient]);
 
-  const isAuthenticated = authReady && !!authUid;
+  const isAuthenticated = !authLoading && !!authUid;
 
   const realUsersQuery = useQuery({
     queryKey: ["adminAllUsers", authUid ?? "none"],

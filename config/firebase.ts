@@ -1,7 +1,8 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { getFirestore, type Firestore } from "firebase/firestore";
+import { getFirestore, initializeFirestore, type Firestore } from "firebase/firestore";
 import { getAuth, type Auth } from "firebase/auth";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
+import { Platform } from "react-native";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDj8rf8Wc3YuDrKohjVzUlEChIWU1irQrQ",
@@ -20,7 +21,14 @@ let storage: FirebaseStorage;
 
 try {
   app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-  db = getFirestore(app);
+  if (getApps().length === 1 && Platform.OS === "web") {
+    db = initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    });
+    console.log("[Firebase] Firestore initialized with long polling (web)");
+  } else {
+    db = getFirestore(app);
+  }
   auth = getAuth(app);
   storage = getStorage(app);
   console.log("[Firebase] Initialized successfully");
