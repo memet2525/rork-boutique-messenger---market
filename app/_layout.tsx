@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect, useCallback, useRef } from "react";
+import React, { useEffect, useCallback, useRef, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Platform, TouchableOpacity } from "react-native";
 import { ChevronLeft } from "lucide-react-native";
@@ -23,8 +23,6 @@ try {
 } catch (e) {
   console.error("[RootLayout] SplashScreen.preventAutoHideAsync error:", e);
 }
-
-const queryClient = new QueryClient();
 
 function setupWebMeta() {
   if (Platform.OS !== 'web' || typeof document === 'undefined') return;
@@ -237,6 +235,8 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  const [queryClient] = useState(() => new QueryClient());
+
   useEffect(() => {
     try {
       void SplashScreen.hideAsync();
